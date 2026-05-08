@@ -1,0 +1,107 @@
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+  animation: fadeUp 0.5s 0.1s var(--ease) both;
+}
+
+.pricing-card {
+  position: relative;
+  padding: 32px 28px;
+  border-radius: var(--r-xl);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.22s var(--ease), border-color 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+.pricing-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(236, 27, 36, 0.3);
+  box-shadow: 0 12px 40px rgba(236, 27, 36, 0.1);
+}
+.pricing-card--featured {
+  border-color: rgba(236, 27, 36, 0.4);
+  background: linear-gradient(160deg,
+    rgba(236,27,36,0.06) 0%,
+    var(--bg-card) 100%
+  );
+  box-shadow: 0 0 0 1px rgba(236,27,36,0.15), 0 8px 40px rgba(236,27,36,0.1);
+}
+
+.pricing-badge {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 16px;
+  border-radius: 99px;
+  background: linear-gradient(135deg, var(--brand-red-dark), var(--brand-red));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  box-shadow: 0 2px 12px rgba(236, 27, 36, 0.4);
+}
+
+.pricing-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-red);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+.pricing-price {
+  font-size: 42px;
+  font-weight: 800;
+  color: var(--text-1);
+  letter-spacing: -1.5px;
+  line-height: 1;
+  margin-bottom: 24px;
+}
+.pricing-period {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+.pricing-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+  flex: 1;
+}
+.pricing-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.pricing-check {
+  color: var(--brand-red);
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.pricing-cta {
+  width: 100%;
+  padding: 12px;
+  text-align: center;
+  border-radius: var(--r-md);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+}

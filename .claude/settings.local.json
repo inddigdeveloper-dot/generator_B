@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m uvicorn app.main:app --reload)",
+      "Bash(python -m uvicorn main:app --reload)",
+      "Bash(dir \"c:\\\\generator\\\\gmb_review\")",
+      "Bash(dir \"c:\\\\generator\\\\gmb_review\\\\src\")",
+      "PowerShell(foreach \\($pid in @\\(21140, 9596, 20340\\)\\) { try { $p = Get-Process -Id $pid -EA Stop; \"$pid -> $\\($p.ProcessName\\)\" } catch { \"$pid -> not found\" } })",
+      "PowerShell(Get-Process -Id 21140 -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Process -Id 9596 -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Process -Id 20340 -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Process -Id 21140 2>$null)",
+      "PowerShell(tasklist /fi \"PID eq 21140\" /fo csv)",
+      "PowerShell(tasklist /fi \"PID eq 9596\" /fo csv)",
+      "PowerShell(tasklist /fi \"PID eq 21140\" /fo csv 2>$null)",
+      "PowerShell(tasklist /fi \"PID eq 13880\" /fo csv 2>$null)",
+      "PowerShell(tasklist /fi \"PID eq 9596\" /fo csv 2>$null)",
+      "PowerShell(tasklist /fi \"PID eq 20340\" /fo csv 2>$null)"
+    ]
+  }
+}

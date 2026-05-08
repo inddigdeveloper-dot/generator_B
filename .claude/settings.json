@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import secrets; print\\(secrets.token_hex\\(32\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\generator\" -Recurse -Force)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(ConvertTo-Json -Depth 100)",
+      "Bash(Test-Path \"c:/generator/backend/static\")",
+      "Bash(Get-ChildItem \"c:/generator/backend/static\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object Name)",
+      "PowerShell(netstat -ano)",
+      "PowerShell(Get-Process -Id 21140, 9596, 20340 -ErrorAction SilentlyContinue)"
+    ]
+  }
+}

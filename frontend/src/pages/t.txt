@@ -1,0 +1,1061 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "../hooks/useAuth";
+import { getQRCode } from "../api/client";
+import InddigLogo from "../components/InddigLogo";
+import "../styles/Dashboard.css";
+
+const LANGUAGES = ["English", "Hindi", "Hinglish"];
+const TONES     = ["Professional", "Friendly", "Enthusiastic"];
+
+const STATS = [
+    { icon: "⭐", bg: "rgba(59,130,246,0.15)",  value: "0", label: "Reviews Generated" },
+    { icon: "📈", bg: "rgba(34,211,238,0.15)",  value: "—", label: "Avg Star Rating"   },
+    { icon: "🔗", bg: "rgba(244,114,182,0.15)", value: "0", label: "Review Link Clicks" },
+    { icon: "🏆", bg: "rgba(16,185,129,0.15)",  value: "0", label: "Keywords Ranked"   },
+];
+
+export default function DashboardPage() {
+    const { user } = useAuth();
+
+    const [keywords,  setKeywords]  = useState(user?.seo_keyword?.join(", ") || "");
+    const [language,  setLanguage]  = useState("English");
+    const [tone,      setTone]      = useState("Professional");
+    const [billItems, setBillItems] = useState("");
+    const [qrSrc,     setQrSrc]     = useState(null);
+    const [copied,    setCopied]    = useState(false);
+    const [saving,    setSaving]    = useState(false);
+    const [saved,     setSaved]     = useState(false);
+
+    const reviewUrl = user?.review_link || "";
+
+    useEffect(() => {
+        if (!reviewUrl) return;
+        getQRCode()
+            .then(data => {
+                if (data?.qr_code) setQrSrc(data.qr_code);
+            })
+            .catch(() => {
+                setQrSrc(
+                    `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(reviewUrl)}`
+                );
+            });
+    }, [reviewUrl]);
+
+    const handleCopy = () => {
+        if (!reviewUrl) return;
+        navigator.clipboard.writeText(reviewUrl).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        await new Promise(r => setTimeout(r, 800));
+        setSaving(false);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+    };
+
+    return (
+        <div className="dashboard-page">
+            <div className="bg-orbs">
+                <div className="orb orb-1" style={{ opacity: 0.08 }} />
+                <div className="orb orb-2" style={{ opacity: 0.07 }} />
+            </div>
+
+            <div className="dashboard-inner">
+
+                {/* ── Header ── */}
+                <div className="dashboard-header">
+                    <div className="dashboard-greeting">Dashboard</div>
+                    <h1 className="dashboard-title">
+                        Welcome back, {user?.name?.split(" ")[0]} 👋
+                    </h1>
+                    <p className="dashboard-sub">
+                        {user?.business_name
+                            ? `Managing reviews for ${user.business_name}`
+                            : "Here's your review performance overview"}
+                    </p>
+                </div>
+
+                {/* ── Stats ── */}
+                <div className="stats-grid">
+                    {STATS.map(s => (
+                        <div className="stat-card" key={s.label}>
+                            <div className="stat-card-icon" style={{ background: s.bg }}>{s.icon}</div>
+                            <div className="stat-card-value">{s.value}</div>
+                            <div className="stat-card-label">{s.label}</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* ── Main layout ── */}
+                <div className="dashboard-main">
+
+                    {/* Left — Review QR card */}
+                    <div className="review-card">
+                        <div className="rc-logo-row">
+                            <div>
+                                <div className="rc-logo-name">inddig<span>media</span></div>
+                                <div className="rc-logo-sub">AI-Powered Review Assistant</div>
+                            </div>
+                        </div>
+
+                        <div className="rc-qr-area">
+                            {qrSrc || reviewUrl ? (
+                                <img
+                                    src={qrSrc || `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(reviewUrl)}`}
+                                    alt="Review QR Code"
+                                    className="rc-qr-img"
+                                />
+                            ) : (
+                                <div className="rc-qr-placeholder">
+                                    <span>📱</span>
+                                    <p>Add your review link<br />to generate QR code</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <p className="rc-scan-label">Scan to Leave a Review ⭐</p>
+                        <div className="rc-biz-name">{user?.business_name || "Your Business"}</div>
+                        <div className="rc-biz-sub">digital reviews</div>
+
+                        <button
+                            className={`rc-copy-btn${copied ? " rc-copy-btn--copied" : ""}`}
+                            onClick={handleCopy}
+                            disabled={!reviewUrl}
+                        >
+                            {copied ? "✓ Copied!" : "Copy Url 📋"}
+                        </button>
+                    </div>
+
+                    {/* Right — Settings panel */}
+                    <div className="settings-panel">
+
+                        {/* Keywords */}
+                        <div className="sp-section">
+                            <label className="sp-label">Keywords</label>
+                            <p className="sp-hint">Add at least 2–3 keywords for better ranking.</p>
+                            <input
+                                type="text"
+                                className="sp-input"
+                                placeholder="Enter keywords (comma separated)"
+                                value={keywords}
+                                onChange={e => setKeywords(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Language */}
+                        <div className="sp-section">
+                            <label className="sp-label">Choose Language</label>
+                            <div className="sp-toggle-group">
+                                {LANGUAGES.map(lang => (
+                                    <button
+                                        key={lang}
+                                        className={`sp-toggle${language === lang ? " sp-toggle--on" : ""}`}
+                                        onClick={() => setLanguage(lang)}
+                                    >
+                                        {lang}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Tone */}
+                        <div className="sp-section">
+                            <label className="sp-label">Default Tone</label>
+                            <div className="sp-toggle-group">
+                                {TONES.map(t => (
+                                    <button
+                                        key={t}
+                                        className={`sp-toggle${tone === t ? " sp-toggle--on" : ""}`}
+                                        onClick={() => setTone(t)}
+                                    >
+                                        {tone === t && <span className="sp-check">✓ </span>}
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Bill Items */}
+                        <div className="sp-section">
+                            <label className="sp-label">Bill Items</label>
+                            <p className="sp-hint">Add bill items the AI will mention in reviews.</p>
+                            <input
+                                type="text"
+                                className="sp-input"
+                                placeholder="Enter items (comma separated)"
+                                value={billItems}
+                                onChange={e => setBillItems(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Save */}
+                        <button
+                            className="sp-save-btn btn btn-primary"
+                            onClick={handleSave}
+                            disabled={saving}
+                        >
+                            {saving ? (
+                                <><span className="spinner" /> Saving…</>
+                            ) : saved ? (
+                                "✓ Saved!"
+                            ) : (
+                                "Save Settings"
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+import { useState } from "react";
+import { useAuth } from "../hooks/useAuth";
+import { updateUserProfile } from "../api/client";
+import "../styles/EditBusiness.css";
+
+export default function EditBusinessPage() {
+    const { user } = useAuth();
+
+    const [form, setForm] = useState({
+        business_name: user?.business_name || "",
+        mobile_no:     user?.mobile_no     || "",
+        review_link:   user?.review_link   || "",
+        seo_keyword:   user?.seo_keyword?.join(", ") || "",
+    });
+    const [saving,  setSaving]  = useState(false);
+    const [success, setSuccess] = useState("");
+    const [error,   setError]   = useState("");
+
+    const handleChange = e => {
+        setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        setSuccess("");
+        setError("");
+    };
+
+    const handleSubmit = async e => {
+        e.preventDefault();
+        setSaving(true);
+        setSuccess("");
+        setError("");
+        try {
+            const payload = {
+                ...form,
+                seo_keyword: form.seo_keyword
+                    .split(",")
+                    .map(k => k.trim())
+                    .filter(Boolean),
+            };
+            await updateUserProfile(payload);
+            setSuccess("Business profile updated successfully!");
+        } catch (err) {
+            setError(typeof err === "string" ? err : "Failed to update profile.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="inner-page">
+            <div className="bg-orbs">
+                <div className="orb orb-1" style={{ opacity: 0.07 }} />
+                <div className="orb orb-2" style={{ opacity: 0.06 }} />
+            </div>
+
+            <div className="inner-page-body">
+                <div className="page-header">
+                    <div className="page-eyebrow">Edit Business</div>
+                    <h1 className="page-title">Business Profile</h1>
+                    <p className="page-sub">Update your business details used for AI review generation.</p>
+                </div>
+
+                <div className="eb-layout">
+                    <form className="panel eb-form" onSubmit={handleSubmit}>
+                        <div className="panel-header">
+                            <span className="panel-title">Business Details</span>
+                        </div>
+
+                        {success && <div className="alert alert-success">{success}</div>}
+                        {error   && <div className="alert alert-error">{error}</div>}
+
+                        <div className="form-group">
+                            <label className="form-label">Business Name</label>
+                            <input
+                                type="text"
+                                name="business_name"
+                                className="form-input"
+                                placeholder="Your business name"
+                                value={form.business_name}
+                                onChange={handleChange}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Mobile Number</label>
+                            <input
+                                type="tel"
+                                name="mobile_no"
+                                className="form-input"
+                                placeholder="+91 XXXXX XXXXX"
+                                value={form.mobile_no}
+                                onChange={handleChange}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Google Review Link</label>
+                            <input
+                                type="url"
+                                name="review_link"
+                                className="form-input"
+                                placeholder="https://g.page/r/your-review-link"
+                                value={form.review_link}
+                                onChange={handleChange}
+                            />
+                            <p className="eb-field-hint">Customers will be sent to this link to leave a review.</p>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">SEO Keywords</label>
+                            <input
+                                type="text"
+                                name="seo_keyword"
+                                className="form-input"
+                                placeholder="e.g. digital marketing, social media, branding"
+                                value={form.seo_keyword}
+                                onChange={handleChange}
+                            />
+                            <p className="eb-field-hint">Comma-separated keywords the AI will include in reviews.</p>
+                        </div>
+
+                        <button
+                            type="submit"
+                            className="btn btn-primary eb-save-btn"
+                            disabled={saving}
+                        >
+                            {saving ? <><span className="spinner" /> Saving…</> : "Save Changes"}
+                        </button>
+                    </form>
+
+                    {/* Info sidebar */}
+                    <div className="eb-info">
+                        <div className="panel">
+                            <div className="panel-header">
+                                <span className="panel-title">Account Info</span>
+                            </div>
+                            <div className="eb-info-item">
+                                <span className="eb-info-label">Email</span>
+                                <span className="eb-info-value">{user?.email || "—"}</span>
+                            </div>
+                            <div className="eb-info-item">
+                                <span className="eb-info-label">Account Name</span>
+                                <span className="eb-info-value">{user?.name || "—"}</span>
+                            </div>
+                            <div className="eb-info-item">
+                                <span className="eb-info-label">Plan</span>
+                                <span className="eb-info-value eb-plan-tag">Free</span>
+                            </div>
+                        </div>
+
+                        <div className="panel eb-tip">
+                            <div className="eb-tip-icon">💡</div>
+                            <p>Add 2–3 targeted keywords to help the AI generate reviews that boost your local SEO ranking.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+import { Link } from "react-router-dom";
+import InddigLogo from "../components/InddigLogo";
+import "../styles/LandingPage.css";
+
+const features = [
+    {
+        icon: "⚡",
+        iconClass: "icon-blue",
+        title: "AI-Powered Reviews",
+        desc: "Generate authentic, human-sounding Google reviews tailored to your business in seconds.",
+    },
+    {
+        icon: "🎯",
+        iconClass: "icon-cyan",
+        title: "SEO Optimised",
+        desc: "Reviews are crafted with your keywords to boost your local search ranking organically.",
+    },
+    {
+        icon: "🔒",
+        iconClass: "icon-indigo",
+        title: "Secure & Private",
+        desc: "Your business data is encrypted and never shared. Full GDPR compliance built in.",
+    },
+];
+
+const stats = [
+    { number: "10K+", label: "Reviews Generated" },
+    { number: "98%",  label: "Satisfaction Rate" },
+    { number: "2.4×", label: "Avg Rating Boost" },
+];
+
+export default function LandingPage() {
+    return (
+        <div className="landing">
+            <div className="bg-orbs">
+                <div className="orb orb-1" />
+                <div className="orb orb-2" />
+                <div className="orb orb-3" />
+            </div>
+
+            <div className="landing-content">
+                <div className="landing-brand-row">
+                    {/* <InddigLogo size={150} /> */}
+                    <span className="landing-brand-name">inddig<span>media</span></span>
+                </div>
+
+                <div className="landing-badge">
+                    <span className="badge-dot" />
+                    AI-powered review generation
+                </div>
+
+                <h1 className="landing-title">
+                    Grow Your Business<br />
+                    with <span className="highlight">Smart Reviews</span>
+                </h1>
+
+                <p className="landing-subtitle">
+                    Generate authentic, SEO-optimised Google Business reviews that
+                    build trust, boost visibility, and drive more customers to your door.
+                </p>
+
+                <div className="landing-cta">
+                    <Link to="/register" className="btn btn-primary">
+                        Start for Free →
+                    </Link>
+                    <Link to="/login" className="btn btn-ghost">
+                        Sign In
+                    </Link>
+                </div>
+            </div>
+
+            <div className="landing-stats">
+                {stats.map(s => (
+                    <div className="stat-item" key={s.label}>
+                        <div className="stat-number gradient-text">{s.number}</div>
+                        <div className="stat-label">{s.label}</div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="landing-features">
+                {features.map(f => (
+                    <div className="feature-card" key={f.title}>
+                        <div className={`feature-icon ${f.iconClass}`}>{f.icon}</div>
+                        <div className="feature-title">{f.title}</div>
+                        <div className="feature-desc">{f.desc}</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+import { Link } from "react-router-dom";
+import LoginForm from "../components/LoginForm";
+import GoogleLoginButton from "../components/GoogleLoginButton";
+import InddigLogo from "../components/InddigLogo";
+import "../styles/AuthPage.css";
+
+export default function LoginPage() {
+    return (
+        <div className="auth-page">
+            <div className="bg-orbs">
+                <div className="orb orb-1" />
+                <div className="orb orb-2" />
+                <div className="orb orb-3" />
+            </div>
+
+            <div className="auth-card">
+                <Link to="/" className="auth-logo">
+                    <InddigLogo size={100} />
+                    {/* <span className="auth-logo-text">inddig<span>media</span></span> */}
+                </Link>
+
+                <div className="auth-header">
+                    <div className="auth-title">Welcome back</div>
+                    <div className="auth-sub">Sign in to your account to continue</div>
+                </div>
+
+                <LoginForm />
+
+                <div className="auth-divider">or</div>
+
+                <GoogleLoginButton />
+
+                <div className="auth-footer">
+                    Don&apos;t have an account?{" "}
+                    <Link to="/register">Create one free</Link>
+                </div>
+            </div>
+        </div>
+    );
+}
+import "../styles/OrderHistory.css";
+
+const MOCK_ORDERS = [];
+
+export default function OrderHistoryPage() {
+    return (
+        <div className="inner-page">
+            <div className="bg-orbs">
+                <div className="orb orb-1" style={{ opacity: 0.07 }} />
+            </div>
+
+            <div className="inner-page-body">
+                <div className="page-header">
+                    <div className="page-eyebrow">Order History</div>
+                    <h1 className="page-title">Your Orders</h1>
+                    <p className="page-sub">View and manage your subscription and purchase history.</p>
+                </div>
+
+                <div className="panel oh-panel" style={{ animationDelay: "0.1s" }}>
+                    {MOCK_ORDERS.length > 0 ? (
+                        <table className="oh-table">
+                            <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Plan</th>
+                                    <th>Amount</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {MOCK_ORDERS.map(order => (
+                                    <tr key={order.id}>
+                                        <td className="oh-id">{order.id}</td>
+                                        <td>{order.plan}</td>
+                                        <td>{order.amount}</td>
+                                        <td>{order.date}</td>
+                                        <td>
+                                            <span className={`oh-status oh-status--${order.status.toLowerCase()}`}>
+                                                {order.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <div className="coming-soon-placeholder">
+                            <div className="coming-soon-icon">🧾</div>
+                            <div className="coming-soon-text">
+                                No orders yet.<br />
+                                Upgrade to a paid plan to see your billing history here.
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+import { Link } from "react-router-dom";
+import "../styles/Pricing.css";
+
+const PLANS = [
+    {
+        name: "Free",
+        price: "₹0",
+        period: "/month",
+        badge: null,
+        highlight: false,
+        features: [
+            "5 AI reviews per month",
+            "1 language (English)",
+            "Basic QR code",
+            "1 business profile",
+            "Community support",
+        ],
+        cta: "Get Started",
+        ctaTo: "/register",
+    },
+    {
+        name: "Pro",
+        price: "₹999",
+        period: "/month",
+        badge: "Most Popular",
+        highlight: true,
+        features: [
+            "100 AI reviews per month",
+            "All 3 languages",
+            "Smart Reply AI",
+            "Custom QR code",
+            "Bill items AI",
+            "Priority support",
+        ],
+        cta: "Start Pro",
+        ctaTo: "/register",
+    },
+    {
+        name: "Business",
+        price: "₹2,499",
+        period: "/month",
+        badge: null,
+        highlight: false,
+        features: [
+            "Unlimited AI reviews",
+            "All 3 languages",
+            "Smart Reply AI",
+            "Custom branded QR",
+            "Analytics dashboard",
+            "Dedicated account manager",
+            "API access",
+        ],
+        cta: "Contact Sales",
+        ctaTo: "/register",
+    },
+];
+
+export default function PricingPage() {
+    return (
+        <div className="inner-page">
+            <div className="bg-orbs">
+                <div className="orb orb-1" style={{ opacity: 0.07 }} />
+                <div className="orb orb-3" style={{ opacity: 0.06 }} />
+            </div>
+
+            <div className="inner-page-body">
+                <div className="page-header" style={{ textAlign: "center", marginBottom: 48 }}>
+                    <div className="page-eyebrow">Pricing</div>
+                    <h1 className="page-title">Simple, Transparent Pricing</h1>
+                    <p className="page-sub">Choose the plan that fits your business. Upgrade or downgrade anytime.</p>
+                </div>
+
+                <div className="pricing-grid">
+                    {PLANS.map(plan => (
+                        <div
+                            key={plan.name}
+                            className={`pricing-card${plan.highlight ? " pricing-card--featured" : ""}`}
+                        >
+                            {plan.badge && (
+                                <div className="pricing-badge">{plan.badge}</div>
+                            )}
+                            <div className="pricing-name">{plan.name}</div>
+                            <div className="pricing-price">
+                                {plan.price}
+                                <span className="pricing-period">{plan.period}</span>
+                            </div>
+
+                            <ul className="pricing-features">
+                                {plan.features.map(f => (
+                                    <li key={f}>
+                                        <span className="pricing-check">✓</span>
+                                        {f}
+                                    </li>
+                                ))}
+                            </ul>
+
+                            <Link
+                                to={plan.ctaTo}
+                                className={`pricing-cta btn${plan.highlight ? " btn-primary" : " btn-ghost"}`}
+                            >
+                                {plan.cta}
+                            </Link>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+import { Link } from "react-router-dom";
+import RegisterForm from "../components/RegisterForm";
+import InddigLogo from "../components/InddigLogo";
+import "../styles/AuthPage.css";
+
+export default function RegisterPage() {
+    return (
+        <div className="auth-page">
+            <div className="bg-orbs">
+                <div className="orb orb-1" />
+                <div className="orb orb-2" />
+                <div className="orb orb-3" />
+            </div>
+
+            <div className="auth-card auth-card-wide">
+                <Link to="/" className="auth-logo">
+                    <InddigLogo size={100} />
+                    {/* <span className="auth-logo-text">inddig<span>media</span></span> */}
+                </Link>
+
+                <div className="auth-header">
+                    <div className="auth-title">Create your account</div>
+                    <div className="auth-sub">Start generating reviews for your business today</div>
+                </div>
+
+                <RegisterForm />
+
+                <div className="auth-footer">
+                    Already have an account?{" "}
+                    <Link to="/login">Sign in</Link>
+                </div>
+            </div>
+        </div>
+    );
+}
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import "../styles/ReviewPage.css";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
+export default function ReviewPage() {
+    const { username } = useParams();
+
+    const [biz, setBiz] = useState(null);
+    const [pageLoading, setPageLoading] = useState(true);
+    const [pageError, setPageError] = useState("");
+
+    const [rating, setRating] = useState(0);
+    const [hovered, setHovered] = useState(0);
+    const [experience, setExperience] = useState("");
+
+    const [reviewText, setReviewText] = useState("");
+    const [googleUrl, setGoogleUrl] = useState("");
+    const [generating, setGenerating] = useState(false);
+    const [genError, setGenError] = useState("");
+    const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        fetch(`${API_URL}/r/${username}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.detail) throw new Error(data.detail);
+                setBiz(data);
+            })
+            .catch(e => setPageError(e.message || "Business not found"))
+            .finally(() => setPageLoading(false));
+    }, [username]);
+
+    async function handleGenerate() {
+        if (!rating) return;
+        setGenerating(true);
+        setGenError("");
+        setReviewText("");
+        setGoogleUrl("");
+        try {
+            const res = await fetch(`${API_URL}/r/${username}/generate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rating, experience: experience.trim() || null }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || "Failed to generate review");
+            setReviewText(data.review_text);
+            setGoogleUrl(data.google_review_url);
+        } catch (e) {
+            setGenError(e.message);
+        } finally {
+            setGenerating(false);
+        }
+    }
+
+    function handleCopy() {
+        navigator.clipboard.writeText(reviewText);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    }
+
+    function handleRegenerate() {
+        setReviewText("");
+        setGoogleUrl("");
+        setGenError("");
+    }
+
+    // Active star display = hovered if hovering, else selected
+    const displayRating = hovered || rating;
+
+    if (pageLoading) {
+        return (
+            <div className="review-page">
+                <div className="review-page-card">
+                    <div className="review-page-state">Loading...</div>
+                </div>
+            </div>
+        );
+    }
+
+    if (pageError) {
+        return (
+            <div className="review-page">
+                <div className="review-page-card">
+                    <div className="review-page-state error">{pageError}</div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="review-page">
+            <div className="bg-orbs" aria-hidden="true">
+                <div className="orb orb-1" />
+                <div className="orb orb-2" />
+                <div className="orb orb-3" />
+            </div>
+
+            <div className="review-page-card">
+                <div className="review-page-header">
+                    <div className="review-page-brand">
+                        Inddig<span>Media</span>
+                    </div>
+                    <div className="review-page-tagline">
+                        Turn experiences into expert reviews
+                    </div>
+                </div>
+
+                <div className="review-page-body">
+                    {/* Business info */}
+                    <div className="review-biz-box">
+                        <div className="review-biz-name">{biz.business_name}</div>
+                        {biz.business_desc && (
+                            <div className="review-biz-desc">{biz.business_desc}</div>
+                        )}
+                        <div className="review-biz-hint">Select stars for professional ideas</div>
+                    </div>
+
+                    {/* Star rating */}
+                    <div className="review-stars" role="group" aria-label="Star rating">
+                        {[1, 2, 3, 4, 5].map(n => (
+                            <button
+                                key={n}
+                                className={`review-star-btn${
+                                    displayRating >= n
+                                        ? hovered ? " preview" : " active"
+                                        : ""
+                                }`}
+                                onClick={() => { setRating(n); setReviewText(""); setGoogleUrl(""); }}
+                                onMouseEnter={() => setHovered(n)}
+                                onMouseLeave={() => setHovered(0)}
+                                aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                            >
+                                ★
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Experience input (before generation) */}
+                    {!reviewText && (
+                        <textarea
+                            className="review-textarea"
+                            placeholder="Rate your experience to see suggestions..."
+                            value={experience}
+                            onChange={e => setExperience(e.target.value)}
+                            rows={4}
+                        />
+                    )}
+
+                    {/* Generated review (after generation) */}
+                    {reviewText && (
+                        <textarea
+                            className="review-textarea generated"
+                            value={reviewText}
+                            onChange={e => setReviewText(e.target.value)}
+                            rows={5}
+                        />
+                    )}
+
+                    {genError && (
+                        <div className="review-gen-error">{genError}</div>
+                    )}
+
+                    <div className="review-actions">
+                        {!reviewText ? (
+                            <button
+                                className="review-btn-generate"
+                                onClick={handleGenerate}
+                                disabled={!rating || generating}
+                            >
+                                {generating
+                                    ? <><span className="spinner" /> Generating...</>
+                                    : "Generate Review"
+                                }
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    className={`review-btn-copy${copied ? " copied" : ""}`}
+                                    onClick={handleCopy}
+                                >
+                                    {copied ? "✓ Copied to clipboard!" : "📋 Copy Review Text"}
+                                </button>
+
+                                <a
+                                    className="review-btn-open"
+                                    href={googleUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    ⭐ Ready to Review
+                                </a>
+
+                                <button
+                                    className="review-btn-regenerate"
+                                    onClick={handleRegenerate}
+                                >
+                                    ↺ Try Again
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div className="review-page-footer">
+                    Professional Review Generation by Inddig Media
+                </div>
+            </div>
+        </div>
+    );
+}
+import { useState } from "react";
+import "../styles/SmartReply.css";
+
+const TONES     = ["Professional", "Friendly", "Enthusiastic"];
+const LANGUAGES = ["English", "Hindi", "Hinglish"];
+
+export default function SmartReplyPage() {
+    const [review,   setReview]   = useState("");
+    const [tone,     setTone]     = useState("Professional");
+    const [language, setLanguage] = useState("English");
+    const [reply,    setReply]    = useState("");
+    const [loading,  setLoading]  = useState(false);
+    const [copied,   setCopied]   = useState(false);
+
+    const handleGenerate = async () => {
+        if (!review.trim()) return;
+        setLoading(true);
+        setReply("");
+        await new Promise(r => setTimeout(r, 1200));
+        setReply(
+            `Thank you so much for your wonderful review! We truly appreciate you taking the time to share your experience with us. Your kind words motivate our entire team to keep delivering the best service possible. We look forward to serving you again soon! 🙏`
+        );
+        setLoading(false);
+    };
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(reply).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    return (
+        <div className="inner-page">
+            <div className="bg-orbs">
+                <div className="orb orb-1" style={{ opacity: 0.07 }} />
+                <div className="orb orb-2" style={{ opacity: 0.06 }} />
+            </div>
+
+            <div className="inner-page-body">
+                <div className="page-header">
+                    <div className="page-eyebrow">Smart Reply</div>
+                    <h1 className="page-title">AI Review Reply Generator</h1>
+                    <p className="page-sub">Paste a customer review and get a professional AI-crafted reply in seconds.</p>
+                </div>
+
+                <div className="sr-layout">
+                    {/* Input panel */}
+                    <div className="panel">
+                        <div className="panel-header">
+                            <span className="panel-title">Customer Review</span>
+                        </div>
+
+                        <textarea
+                            className="sr-textarea"
+                            placeholder="Paste the customer review here…"
+                            value={review}
+                            onChange={e => setReview(e.target.value)}
+                            rows={5}
+                        />
+
+                        <div className="sr-controls">
+                            <div className="sr-control-group">
+                                <label className="sp-label">Language</label>
+                                <div className="sp-toggle-group">
+                                    {LANGUAGES.map(l => (
+                                        <button
+                                            key={l}
+                                            className={`sp-toggle${language === l ? " sp-toggle--on" : ""}`}
+                                            onClick={() => setLanguage(l)}
+                                        >
+                                            {l}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="sr-control-group">
+                                <label className="sp-label">Tone</label>
+                                <div className="sp-toggle-group">
+                                    {TONES.map(t => (
+                                        <button
+                                            key={t}
+                                            className={`sp-toggle${tone === t ? " sp-toggle--on" : ""}`}
+                                            onClick={() => setTone(t)}
+                                        >
+                                            {t}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            className="btn btn-primary sr-generate-btn"
+                            onClick={handleGenerate}
+                            disabled={loading || !review.trim()}
+                        >
+                            {loading ? <><span className="spinner" /> Generating…</> : "Generate Reply ✨"}
+                        </button>
+                    </div>
+
+                    {/* Output panel */}
+                    <div className="panel">
+                        <div className="panel-header">
+                            <span className="panel-title">AI Reply</span>
+                            {reply && (
+                                <button
+                                    className={`copy-reply-btn${copied ? " copied" : ""}`}
+                                    onClick={handleCopy}
+                                >
+                                    {copied ? "✓ Copied" : "Copy"}
+                                </button>
+                            )}
+                        </div>
+
+                        {loading ? (
+                            <div className="sr-loading">
+                                <div className="sr-loading-dots">
+                                    <span /><span /><span />
+                                </div>
+                                <p>Crafting your reply…</p>
+                            </div>
+                        ) : reply ? (
+                            <div className="sr-reply-text">{reply}</div>
+                        ) : (
+                            <div className="coming-soon-placeholder">
+                                <div className="coming-soon-icon">💬</div>
+                                <div className="coming-soon-text">
+                                    Your AI reply will appear here.<br />
+                                    Paste a review and click Generate.
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}

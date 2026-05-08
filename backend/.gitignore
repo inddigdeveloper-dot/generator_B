@@ -1,0 +1,15 @@
+# Secrets
+.env
+*.env
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated files
+*.png
+static/
+
+# Scratch files
+*.txt
