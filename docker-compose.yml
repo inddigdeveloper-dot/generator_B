@@ -1,0 +1,113 @@
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gmb_review
+      POSTGRES_USER: gmb
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gmb -d gmb_review"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (rate-limit + cache) ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Run Alembic migrations (one-shot, then exits) ───────────────────────────
+  migrate:
+    build: ./backend
+    command: alembic upgrade head
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://gmb:${DB_PASSWORD}@db/gmb_review
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+    restart: "no"
+
+  # ── FastAPI backend ─────────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+psycopg2://gmb:${DB_PASSWORD}@db/gmb_review
+      SECRET_KEY: ${SECRET_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      REDIS_URL: redis://redis:6379/0
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://localhost}
+      FRONTEND_URL: ${FRONTEND_URL:-https://localhost}
+      DEBUG: "false"
+    volumes:
+      - backend_static:/app/static
+    expose:
+      - "8000"
+
+  # ── React frontend (nginx) ──────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${FRONTEND_URL:-https://localhost}/api
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    expose:
+      - "80"
+    volumes:
+      - backend_static:/usr/share/nginx/html/static:ro
+
+  # ── Caddy (HTTPS reverse proxy) ─────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_static:
+  caddy_data:
+  caddy_config:

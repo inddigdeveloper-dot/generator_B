@@ -17,10 +17,17 @@ class ReviewOut(BaseModel):
     google_review_url: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ReviewListResponse(BaseModel):
     reviews: List[ReviewOut]
     total: int
+    skip: int = 0
+    limit: int = 20
+
+
+class ReviewStats(BaseModel):
+    total_reviews: int
+    avg_rating: Optional[float]
+    this_month: int

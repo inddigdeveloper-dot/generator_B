@@ -4,7 +4,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const api = axios.create({
     baseURL: BASE_URL,
-    timeout: 10000,
+    timeout: 30000,
 });
 
 api.interceptors.request.use((config) => {
@@ -116,12 +116,21 @@ export const generateReview = async (reviewData) => {
     }
 };
 
-export const getReviewHistory = async () => {
+export const getReviewHistory = async ({ skip = 0, limit = 20 } = {}) => {
     try {
-        const { data } = await api.get("/reviews/history");
+        const { data } = await api.get("/reviews/history", { params: { skip, limit } });
         return data;
     } catch (error) {
         throw error.response?.data?.detail || "Failed to fetch review history";
+    }
+};
+
+export const getReviewStats = async () => {
+    try {
+        const { data } = await api.get("/reviews/stats");
+        return data;
+    } catch (error) {
+        throw error.response?.data?.detail || "Failed to fetch review stats";
     }
 };
 
@@ -140,6 +149,15 @@ export const updateUserProfile = async (profileData) => {
         return data;
     } catch (error) {
         throw error.response?.data?.detail || "Failed to update profile";
+    }
+};
+
+export const generateSmartReply = async ({ review_text, tone, language }) => {
+    try {
+        const { data } = await api.post("/smart-reply/generate", { review_text, tone, language });
+        return data;
+    } catch (error) {
+        throw error.response?.data?.detail || "Failed to generate reply";
     }
 };
 

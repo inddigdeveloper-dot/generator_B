@@ -14,5 +14,5 @@ class PublicGenerateRequest(BaseModel):
 
 
 class PublicGenerateResponse(BaseModel):
-    review_text: str
+    reviews: list[str]
     google_review_url: str

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { generateSmartReply } from "../api/client";
 import "../styles/SmartReply.css";
 
 const TONES     = ["Professional", "Friendly", "Enthusiastic"];
@@ -10,17 +11,22 @@ export default function SmartReplyPage() {
     const [language, setLanguage] = useState("English");
     const [reply,    setReply]    = useState("");
     const [loading,  setLoading]  = useState(false);
+    const [error,    setError]    = useState("");
     const [copied,   setCopied]   = useState(false);
 
     const handleGenerate = async () => {
         if (!review.trim()) return;
         setLoading(true);
         setReply("");
-        await new Promise(r => setTimeout(r, 1200));
-        setReply(
-            `Thank you so much for your wonderful review! We truly appreciate you taking the time to share your experience with us. Your kind words motivate our entire team to keep delivering the best service possible. We look forward to serving you again soon! 🙏`
-        );
-        setLoading(false);
+        setError("");
+        try {
+            const data = await generateSmartReply({ review_text: review.trim(), tone, language });
+            setReply(data.reply);
+        } catch (err) {
+            setError(typeof err === "string" ? err : "Failed to generate reply. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleCopy = () => {
@@ -55,7 +61,7 @@ export default function SmartReplyPage() {
                             className="sr-textarea"
                             placeholder="Paste the customer review here…"
                             value={review}
-                            onChange={e => setReview(e.target.value)}
+                            onChange={e => { setReview(e.target.value); setReply(""); setError(""); }}
                             rows={5}
                         />
 
@@ -90,6 +96,8 @@ export default function SmartReplyPage() {
                                 </div>
                             </div>
                         </div>
+
+                        {error && <div className="review-gen-error" style={{ marginTop: "0.75rem" }}>{error}</div>}
 
                         <button
                             className="btn btn-primary sr-generate-btn"

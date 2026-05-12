@@ -1,3 +1,4 @@
+import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -6,9 +7,17 @@ from sqlalchemy.orm import sessionmaker
 from app.db.database import Base, get_db
 from app.main import app
 
-SQLITE_URL = "sqlite:///./test.db"
+# Use a PostgreSQL test database if TEST_DATABASE_URL is set, otherwise fall
+# back to SQLite.  SQLite works because the JsonList TypeDecorator stores lists
+# as plain JSON text, avoiding the PostgreSQL-only ARRAY type.
+_TEST_DB_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "sqlite:///./test.db",
+)
 
-engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
+_connect_args = {"check_same_thread": False} if _TEST_DB_URL.startswith("sqlite") else {}
+
+engine = create_engine(_TEST_DB_URL, connect_args=_connect_args)
 TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -30,6 +39,16 @@ def db():
         session.close()
         transaction.rollback()
         connection.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    """Clear the in-memory rate-limit counters before each test so tests don't
+    bleed into each other through the shared TestClient IP address."""
+    from app.core.limiter import limiter
+    storage = getattr(limiter, "_storage", None)
+    if storage and hasattr(storage, "reset"):
+        storage.reset()
 
 
 @pytest.fixture

@@ -26,6 +26,10 @@ frontend/dist-ssr/
 .pytest_cache/
 .coverage
 htmlcov/
+backend/test.db
+
+# Docker
+.env
 
 # IDE
 .idea/

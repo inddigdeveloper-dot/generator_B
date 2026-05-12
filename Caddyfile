@@ -1,0 +1,38 @@
+{$DOMAIN} {
+    # TLS is automatic — Caddy fetches a Let's Encrypt cert on first request.
+    # For local dev with DOMAIN=localhost it uses a self-signed cert.
+
+    # API — proxy to FastAPI
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy backend:8000
+    }
+
+    # Static files served by backend (QR code PNGs)
+    handle /static/* {
+        reverse_proxy backend:8000
+    }
+
+    # Everything else → SPA (nginx)
+    handle {
+        reverse_proxy frontend:80
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Compress responses
+    encode zstd gzip
+
+    # Log to stdout (docker logs)
+    log {
+        output stdout
+        format console
+    }
+}

@@ -11,6 +11,7 @@ from app.schemas.user import (
     LoginBusiness,
     RefreshTokenRequest,
     Token,
+    UpdateProfile,
     UserProfile,
 ) 
 from app.services import auth as auth_services
@@ -144,4 +145,17 @@ def refresh_tokens(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserProfile)
 def get_me(current_user: UserBusiness = Depends(auth_services.get_current_user)):
+    return current_user
+
+
+@router.patch("/me", response_model=UserProfile)
+def update_me(
+    payload: UpdateProfile,
+    db: Session = Depends(get_db),
+    current_user: UserBusiness = Depends(auth_services.get_current_user),
+):
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
+    db.commit()
+    db.refresh(current_user)
     return current_user
