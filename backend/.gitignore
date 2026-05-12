@@ -11,5 +11,3 @@ __pycache__/
 *.png
 static/
 
-# Scratch files
-*.txt
