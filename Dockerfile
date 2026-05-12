@@ -19,5 +19,7 @@ RUN mkdir -p static
 
 EXPOSE 8000
 
-# Shell form so ${PORT} is expanded at runtime (Railway injects PORT dynamically)
-CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+CMD ["/docker-entrypoint.sh"]
