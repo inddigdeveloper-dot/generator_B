@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
     allowed_origins: str = "http://localhost:5173"
     frontend_url: str = "http://localhost:5173"
+    backend_url: str = "http://localhost:8000"
 
     google_client_id: str
     google_client_secret: Optional[str] = None  # reserved for server-side OAuth
