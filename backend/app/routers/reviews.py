@@ -141,7 +141,7 @@ def get_or_create_qr(
         )
     review_page_url = f"{_settings.frontend_url}/r/{current_user.user_name}"
     path = generate_qr(review_page_url, current_user.id)
-    current_user.qr_code_url = f"/{path}"
+    current_user.qr_code_url = f"{_settings.backend_url}/{path}"
     db.commit()
     db.refresh(current_user)
     return {"qr_code_url": current_user.qr_code_url}
