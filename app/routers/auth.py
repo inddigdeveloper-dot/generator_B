@@ -67,7 +67,7 @@ def login(request: Request, payload: LoginBusiness, db: Session = Depends(get_db
 def google_auth(request: Request, payload: GoogleAuthPayload, db: Session = Depends(get_db)):
     try:
         google_data = auth_services.verify_google_token(payload.token)
-    except ValueError:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired Google token",
