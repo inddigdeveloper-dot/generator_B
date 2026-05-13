@@ -1,5 +1,9 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.core.limiter import limiter
 from app.db.database import get_db
@@ -67,59 +71,63 @@ def login(request: Request, payload: LoginBusiness, db: Session = Depends(get_db
 def google_auth(request: Request, payload: GoogleAuthPayload, db: Session = Depends(get_db)):
     try:
         google_data = auth_services.verify_google_token(payload.token)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired Google token",
+
+        google_id: str = google_data["sub"]
+        email: str = google_data["email"]
+        name: str = google_data.get("name") or email.split("@")[0]
+
+        user = db.query(UserBusiness).filter(UserBusiness.google_id == google_id).first()
+
+        if not user:
+            existing = auth_services.get_user_by_email(db, email)
+            if existing:
+                existing.google_id = google_id
+                existing.auth_provider = "google"
+                db.commit()
+                db.refresh(existing)
+                user = existing
+            else:
+                import random as _rng
+                base_username = email.split("@")[0].replace(".", "_")
+                username = base_username
+                if auth_services.get_user(db, username):
+                    for _ in range(20):
+                        candidate = f"{base_username}_{_rng.randint(1000, 99999)}"
+                        if not auth_services.get_user(db, candidate):
+                            username = candidate
+                            break
+                    else:
+                        raise HTTPException(status_code=500, detail="Could not generate unique username")
+
+                user = UserBusiness(
+                    name=name,
+                    user_name=username,
+                    business_name=name,
+                    email=email,
+                    google_id=google_id,
+                    auth_provider="google",
+                    seo_keyword=[],
+                    mobile_no="",
+                    hashed_password=None,
+                    review_link="",
+                    business_desc="",
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+
+        return Token(
+            access_token=auth_services.create_access_token({"sub": user.user_name}),
+            refresh_token=auth_services.create_refresh_token({"sub": user.user_name}),
+            token_type="bearer",
         )
 
-    google_id: str = google_data["sub"]
-    email: str = google_data["email"]
-    name: str = google_data.get("name", "")
-
-    user = db.query(UserBusiness).filter(UserBusiness.google_id == google_id).first()
-
-    if not user:
-        existing = auth_services.get_user_by_email(db, email)
-        if existing:
-            existing.google_id = google_id
-            db.commit()
-            db.refresh(existing)
-            user = existing
-        else:
-            import random as _rng
-            base_username = email.split("@")[0]
-            username = base_username
-            suffix_pool = [google_id[:6]] + [str(_rng.randint(100, 9999)) for _ in range(8)]
-            for suffix in suffix_pool:
-                candidate = f"{base_username}_{suffix}" if auth_services.get_user(db, username) else username
-                if not auth_services.get_user(db, candidate):
-                    username = candidate
-                    break
-            else:
-                raise HTTPException(status_code=500, detail="Could not generate unique username")
-
-            user = UserBusiness(
-                name=name,
-                user_name=username,
-                business_name=name,
-                email=email,
-                google_id=google_id,
-                auth_provider="google",
-                seo_keyword=[],
-                mobile_no="",
-                review_link="",
-                business_desc="",
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-
-    return Token(
-        access_token=auth_services.create_access_token({"sub": user.user_name}),
-        refresh_token=auth_services.create_refresh_token({"sub": user.user_name}),
-        token_type="bearer",
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception("Google auth error: %s", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/refresh", response_model=Token)
