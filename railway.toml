@@ -3,6 +3,8 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
+preDeployCommand = "sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do alembic upgrade head && exit 0; echo \"Migration retry $i/10...\"; sleep 8; done; exit 1'"
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"
 healthcheckPath = "/health"
 healthcheckTimeout = 120
 restartPolicyType = "on_failure"

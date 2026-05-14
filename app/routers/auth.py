@@ -41,6 +41,7 @@ def register(request: Request, payload: BusinessRegister, db: Session = Depends(
         hashed_password=auth_services.get_password_hash(payload.password),
         review_link=payload.review_link,
         business_desc=payload.business_desc,
+        google_place_id=payload.google_place_id,
         auth_provider="local",
     )
     db.add(user)

@@ -12,6 +12,7 @@ class BusinessRegister(BaseModel):
     password: str
     review_link: str
     business_desc: str
+    google_place_id: Optional[str] = None
 
 
 class LoginBusiness(BaseModel):

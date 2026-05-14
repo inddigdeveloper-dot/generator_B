@@ -12,7 +12,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = (
+_SYSTEM_PROMPT = ( 
     "You are a review-writing assistant for local businesses. "
     "Write short, authentic-sounding Google reviews exactly as instructed. "
     "Output ONLY the review text — no preamble, no quotes, no markdown."
