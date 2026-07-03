@@ -117,6 +117,7 @@ def _style_instruction(language: str | None, tone: str | None, rating: int) -> s
         "- Use 1 to 2 short complete sentences.",
         "- Do not write a long paragraph.",
         "- Do not end with an incomplete sentence.",
+        "- Do not mention exact numbers, days, dates, prices, or timelines unless the customer wrote them.",
         "- Prefer plain customer words over polished AI-style phrasing.",
     ]
     return "\n".join(line for line in lines if line)
@@ -147,6 +148,7 @@ Reframe what they said into a genuine-sounding review. Do not invent facts beyon
     else:
         context_block = f"""The customer didn't share specifics. Write a believable {rating}-star review for this business.
 Pick ONE concrete detail a real visitor might mention (service speed, staff, ambience, value, product quality).
+Do not invent exact numbers, dates, durations, prices, or timelines.
 Don't list everything — one focused angle makes reviews sound more human."""
 
     if profile_language == "English" and profile_tone_name == "Professional":
@@ -176,6 +178,7 @@ REVIEW BRIEF
 RULES
 - 2 to 3 sentences. Casual, phone-typed feel.
 - Sound human. Avoid corporate words like "establishment", "patronize", "exemplary".
+- Do not mention exact numbers, days, dates, prices, or timelines unless the customer explicitly wrote them.
 - Do NOT start with the business name or "I" — vary the opening.
 - No quotes, no markdown, no bullets, no preamble like "Here's the review:".
 - Output ONLY the review text."""
@@ -278,7 +281,7 @@ def _generate_one(
     prompt = _build_prompt(business, rating, customer_name, experience, variant_idx)
     language = getattr(business, "language", None) or "English"
     tone = getattr(business, "tone", None) or "Professional"
-    max_tokens = 140 if (language != "English" or tone != "Professional") else 220
+    max_tokens = 240 if (language != "English" or tone != "Professional") else 220
     try:
         # Small stagger so concurrent calls don't all hit the API at the same millisecond
         time.sleep(variant_idx * 0.15)
@@ -339,7 +342,7 @@ def generate_review_text(
     prompt        = _build_prompt(business, rating, customer_name, experience, variant_idx=0)
     language      = getattr(business, "language", None) or "English"
     tone          = getattr(business, "tone", None) or "Professional"
-    max_tokens    = 140 if (language != "English" or tone != "Professional") else 200
+    max_tokens    = 240 if (language != "English" or tone != "Professional") else 200
 
     try:
         raw = _provider.generate(prompt, max_tokens=max_tokens, temperature=0.8)
