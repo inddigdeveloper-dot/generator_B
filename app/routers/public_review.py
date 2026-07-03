@@ -25,6 +25,10 @@ def _client_ip(request: Request) -> str:
     return forwarded if forwarded else (request.client.host if request.client else "unknown")
 
 
+def _cache_context(biz: UserBusiness) -> str:
+    return f"language={biz.language or 'English'}|tone={biz.tone or 'Professional'}"
+
+
 @router.get("/{username}", response_model=PublicBusinessInfo)
 def get_business_info(username: str, db: Session = Depends(get_db)):
     biz = db.query(UserBusiness).filter(UserBusiness.user_name == username).first()
@@ -62,7 +66,8 @@ def generate_public_review(
         )
 
     # ── Cache check (pure Python, 20-minute TTL) ───────────────────────────────
-    cached = review_cache.get(username, payload.rating, payload.experience)
+    cache_context = _cache_context(biz)
+    cached = review_cache.get(username, payload.rating, payload.experience, context=cache_context)
     if cached:
         return PublicGenerateResponse(reviews=cached, google_review_url=google_url)
 
@@ -82,7 +87,7 @@ def generate_public_review(
         )
 
     # ── Cache results ──────────────────────────────────────────────────────────
-    review_cache.put(username, payload.rating, payload.experience, reviews)
+    review_cache.put(username, payload.rating, payload.experience, reviews, context=cache_context)
 
     # ── Persist all variants ───────────────────────────────────────────────────
     for text in reviews:

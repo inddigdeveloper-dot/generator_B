@@ -45,8 +45,8 @@ def _redis_client():
     return _redis
 
 
-def _cache_key(username: str, rating: int, experience: str | None) -> str:
-    raw = f"{username}|{rating}|{experience or ''}".encode()
+def _cache_key(username: str, rating: int, experience: str | None, context: str | None = None) -> str:
+    raw = f"{username}|{rating}|{experience or ''}|{context or ''}".encode()
     return f"rc:{hashlib.sha1(raw).hexdigest()}"
 
 
@@ -57,9 +57,9 @@ _lock  = Lock()
 
 # ── Public interface ──────────────────────────────────────────────────────────
 
-def get(username: str, rating: int, experience: str | None) -> list[str] | None:
+def get(username: str, rating: int, experience: str | None, context: str | None = None) -> list[str] | None:
     r = _redis_client()
-    k = _cache_key(username, rating, experience)
+    k = _cache_key(username, rating, experience, context)
 
     if r:
         try:
@@ -76,9 +76,9 @@ def get(username: str, rating: int, experience: str | None) -> list[str] | None:
         return None
 
 
-def put(username: str, rating: int, experience: str | None, reviews: list[str]) -> None:
+def put(username: str, rating: int, experience: str | None, reviews: list[str], context: str | None = None) -> None:
     r = _redis_client()
-    k = _cache_key(username, rating, experience)
+    k = _cache_key(username, rating, experience, context)
 
     if r:
         try:
