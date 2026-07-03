@@ -77,15 +77,18 @@ def _language_instruction(language: str | None, tone: str | None) -> str:
     if language == "English" and tone == "Professional":
         return ""
     if language == "Hindi":
-        return """- Write the review in simple, everyday Hindi.
-- Avoid heavy, bookish, or formal Hindi. It should sound like a normal customer typed it."""
+        return """- Write the review in Hindi using Devanagari script only.
+- Do not use Roman Hindi or Hinglish.
+- Avoid English words like "service", "team", "recommend", and "solution" unless they are part of the business name.
+- Use simple, everyday Hindi. Avoid heavy, bookish, or formal Hindi."""
     if language == "Hinglish":
         return """- Write the review in natural Hinglish.
 - Mix Hindi and English only where it feels normal; do not force translation for common words."""
     if language == "Gujarati":
-        return """- Write the review in simple, conversational Gujarati.
-- Avoid overly literary Gujarati and long complex sentences.
-- Keep common business/service words natural if Gujarati translation sounds forced."""
+        return """- Write the review in Gujarati script only.
+- Use simple, conversational Gujarati that a normal customer would write.
+- Avoid overly literary Gujarati, long clauses, and complex sentence structure.
+- Keep every sentence complete. Do not stop mid-thought."""
     return "- Write the review in English."
 
 
@@ -111,7 +114,9 @@ def _style_instruction(language: str | None, tone: str | None, rating: int) -> s
         _language_instruction(language, tone),
         tone_line,
         rating_line,
-        "- Use 1 to 2 short sentences if possible.",
+        "- Use 1 to 2 short complete sentences.",
+        "- Do not write a long paragraph.",
+        "- Do not end with an incomplete sentence.",
         "- Prefer plain customer words over polished AI-style phrasing.",
     ]
     return "\n".join(line for line in lines if line)
@@ -184,6 +189,10 @@ def _clean_output(text: str) -> str:
     for prefix in ("Here's the review:", "Review:", "Here is the review:"):
         if cleaned.lower().startswith(prefix.lower()):
             cleaned = cleaned[len(prefix):].strip()
+    if cleaned and cleaned[-1] not in ".!?।॥!?":
+        last_end = max(cleaned.rfind("."), cleaned.rfind("!"), cleaned.rfind("?"), cleaned.rfind("।"), cleaned.rfind("॥"))
+        if last_end > 0:
+            cleaned = cleaned[: last_end + 1].strip()
     return cleaned
 
 
@@ -267,10 +276,13 @@ def _generate_one(
 ) -> tuple[int, str | None]:
     """Returns (variant_idx, text | None)."""
     prompt = _build_prompt(business, rating, customer_name, experience, variant_idx)
+    language = getattr(business, "language", None) or "English"
+    tone = getattr(business, "tone", None) or "Professional"
+    max_tokens = 140 if (language != "English" or tone != "Professional") else 220
     try:
         # Small stagger so concurrent calls don't all hit the API at the same millisecond
         time.sleep(variant_idx * 0.15)
-        raw     = _provider.generate(prompt, max_tokens=220, temperature=temperature)
+        raw     = _provider.generate(prompt, max_tokens=max_tokens, temperature=temperature)
         cleaned = _clean_output(raw)
         return variant_idx, (cleaned if cleaned else None)
     except (QuotaExceededError, RuntimeError) as e:
@@ -325,9 +337,12 @@ def generate_review_text(
     customer_name = (customer_name or "a customer").strip()
     experience    = _sanitize_user_input(experience)
     prompt        = _build_prompt(business, rating, customer_name, experience, variant_idx=0)
+    language      = getattr(business, "language", None) or "English"
+    tone          = getattr(business, "tone", None) or "Professional"
+    max_tokens    = 140 if (language != "English" or tone != "Professional") else 200
 
     try:
-        raw = _provider.generate(prompt, max_tokens=200, temperature=0.8)
+        raw = _provider.generate(prompt, max_tokens=max_tokens, temperature=0.8)
     except QuotaExceededError:
         logger.warning("LLM quota exhausted for business_id=%s — using fallback", business.id)
         return _fallback_review(business, rating, experience, variant_idx=0)
