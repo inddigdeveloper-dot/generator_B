@@ -55,6 +55,33 @@ def _tone_for_rating(rating: int) -> str:
     return "frustrated but constructive — clearly state what went wrong, no insults or threats"
 
 
+def _profile_tone_instruction(tone: str | None, rating: int) -> str:
+    tone = tone or "Professional"
+    if tone == "Friendly":
+        style = "friendly, natural, and conversational"
+    elif tone == "Enthusiastic":
+        style = "energetic, expressive, and memorable"
+    else:
+        style = "professional, clear, and polished"
+
+    if rating <= 2:
+        return f"{style}, but keep the criticism honest and do not make the review sound fake-positive"
+    if rating == 3:
+        return f"{style}, while staying balanced about both positives and improvements"
+    return style
+
+
+def _language_instruction(language: str | None) -> str:
+    language = language or "English"
+    if language == "Hindi":
+        return "Write the review in Hindi."
+    if language == "Hinglish":
+        return "Write the review in natural Hinglish, mixing Hindi and English like a real customer."
+    if language == "Gujarati":
+        return "Write the review in Gujarati."
+    return "Write the review in English."
+
+
 def _build_prompt(
     business: UserBusiness,
     rating: int,
@@ -63,8 +90,10 @@ def _build_prompt(
     variant_idx: int = 0,
 ) -> str:
     seo_keywords = ", ".join(business.seo_keyword) if business.seo_keyword else "none"
-    tone   = _tone_for_rating(rating)
-    angle  = _VARIANT_ANGLES[variant_idx % len(_VARIANT_ANGLES)]
+    rating_tone = _tone_for_rating(rating)
+    profile_tone = _profile_tone_instruction(getattr(business, "tone", None), rating)
+    language = _language_instruction(getattr(business, "language", None))
+    angle = _VARIANT_ANGLES[variant_idx % len(_VARIANT_ANGLES)]
 
     if experience and experience.strip():
         context_block = f"""The customer shared this about their visit:
@@ -87,7 +116,9 @@ BUSINESS
 
 REVIEW BRIEF
 - Rating: {rating}/5
-- Tone: {tone}
+- Rating sentiment: {rating_tone}
+- Selected tone style: {profile_tone}
+- Language: {language}
 - Writing angle for THIS review: {angle}
 
 {context_block}

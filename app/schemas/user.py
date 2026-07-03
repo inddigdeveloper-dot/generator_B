@@ -67,8 +67,8 @@ class UpdateProfile(BaseModel):
     @field_validator("language")
     @classmethod
     def validate_language(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in ("English", "Hindi", "Hinglish"):
-            raise ValueError("language must be one of: English, Hindi, Hinglish")
+        if v is not None and v not in ("English", "Hindi", "Hinglish", "Gujarati"):
+            raise ValueError("language must be one of: English, Hindi, Hinglish, Gujarati")
         return v
 
     @field_validator("tone")
