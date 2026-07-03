@@ -84,11 +84,6 @@ def _language_instruction(language: str | None, tone: str | None) -> str:
     if language == "Hinglish":
         return """- Write the review in natural Hinglish.
 - Mix Hindi and English only where it feels normal; do not force translation for common words."""
-    if language == "Gujarati":
-        return """- Write the review in Gujarati script only.
-- Use simple, conversational Gujarati that a normal customer would write.
-- Avoid overly literary Gujarati, long clauses, and complex sentence structure.
-- Keep every sentence complete. Do not stop mid-thought."""
     return "- Write the review in English."
 
 
