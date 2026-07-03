@@ -71,15 +71,50 @@ def _profile_tone_instruction(tone: str | None, rating: int) -> str:
     return style
 
 
-def _language_instruction(language: str | None) -> str:
+def _language_instruction(language: str | None, tone: str | None) -> str:
     language = language or "English"
+    tone = tone or "Professional"
+    if language == "English" and tone == "Professional":
+        return ""
     if language == "Hindi":
-        return "Write the review in Hindi."
+        return """- Write the review in simple, everyday Hindi.
+- Avoid heavy, bookish, or formal Hindi. It should sound like a normal customer typed it."""
     if language == "Hinglish":
-        return "Write the review in natural Hinglish, mixing Hindi and English like a real customer."
+        return """- Write the review in natural Hinglish.
+- Mix Hindi and English only where it feels normal; do not force translation for common words."""
     if language == "Gujarati":
-        return "Write the review in Gujarati."
-    return "Write the review in English."
+        return """- Write the review in simple, conversational Gujarati.
+- Avoid overly literary Gujarati and long complex sentences.
+- Keep common business/service words natural if Gujarati translation sounds forced."""
+    return "- Write the review in English."
+
+
+def _style_instruction(language: str | None, tone: str | None, rating: int) -> str:
+    language = language or "English"
+    tone = tone or "Professional"
+    if language == "English" and tone == "Professional":
+        return ""
+
+    tone_line = ""
+    if tone == "Friendly":
+        tone_line = "- Friendly tone: sound warm and personal, not like an ad."
+    elif tone == "Enthusiastic":
+        tone_line = "- Enthusiastic tone: show genuine excitement, but avoid over-the-top marketing words."
+
+    rating_line = ""
+    if rating <= 2:
+        rating_line = "- For low ratings, stay honest and calm. Do not make it sound positive."
+    elif rating == 3:
+        rating_line = "- For a 3-star review, keep it mixed and believable."
+
+    lines = [
+        _language_instruction(language, tone),
+        tone_line,
+        rating_line,
+        "- Use 1 to 2 short sentences if possible.",
+        "- Prefer plain customer words over polished AI-style phrasing.",
+    ]
+    return "\n".join(line for line in lines if line)
 
 
 def _build_prompt(
@@ -90,9 +125,11 @@ def _build_prompt(
     variant_idx: int = 0,
 ) -> str:
     seo_keywords = ", ".join(business.seo_keyword) if business.seo_keyword else "none"
+    profile_language = getattr(business, "language", None) or "English"
+    profile_tone_name = getattr(business, "tone", None) or "Professional"
     rating_tone = _tone_for_rating(rating)
-    profile_tone = _profile_tone_instruction(getattr(business, "tone", None), rating)
-    language = _language_instruction(getattr(business, "language", None))
+    profile_tone = _profile_tone_instruction(profile_tone_name, rating)
+    extra_style = _style_instruction(profile_language, profile_tone_name, rating)
     angle = _VARIANT_ANGLES[variant_idx % len(_VARIANT_ANGLES)]
 
     if experience and experience.strip():
@@ -107,6 +144,16 @@ Reframe what they said into a genuine-sounding review. Do not invent facts beyon
 Pick ONE concrete detail a real visitor might mention (service speed, staff, ambience, value, product quality).
 Don't list everything — one focused angle makes reviews sound more human."""
 
+    if profile_language == "English" and profile_tone_name == "Professional":
+        brief_block = f"- Tone: {rating_tone}"
+    else:
+        brief_block = f"""- Rating sentiment: {rating_tone}
+- Selected tone style: {profile_tone}
+- Selected language: {profile_language}
+
+STYLE REQUIREMENTS
+{extra_style}"""
+
     return f"""You are {customer_name}, a real customer writing a {rating}-star Google review for a local business.
 
 BUSINESS
@@ -116,9 +163,7 @@ BUSINESS
 
 REVIEW BRIEF
 - Rating: {rating}/5
-- Rating sentiment: {rating_tone}
-- Selected tone style: {profile_tone}
-- Language: {language}
+{brief_block}
 - Writing angle for THIS review: {angle}
 
 {context_block}
