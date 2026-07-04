@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 _provider = get_provider()
 
+_SHORT_REVIEWS_PER_FIVE = 2
+
 # Each variant gets a different writing angle so outputs are diverse
 _VARIANT_ANGLES = [
     "Open with how the visit made you feel — not with the business name.",
@@ -41,6 +43,68 @@ _EXP_TEMPLATES = {
         ("{name} fell short of expectations.", "Hope they take feedback seriously."),
         ("Not the best experience at {name}.", "There's definitely room to do better."),
         ("Had some issues at {name}.", "Would need to see real improvement before returning."),
+    ],
+}
+
+_SHORT_EXP_TEMPLATES = {
+    "high": [
+        "{detail}. Smooth experience overall.",
+        "{detail}. Really happy with it.",
+        "{detail}. Would go again.",
+        "Good service and {detail}.",
+        "{detail}. Simple and worth it.",
+    ],
+    "mid": [
+        "{detail}. Decent, but not amazing.",
+        "{detail}. Okay overall.",
+        "{detail}. Some parts could improve.",
+        "Mixed experience, especially {detail}.",
+        "{detail}. Fine for a quick visit.",
+    ],
+    "low": [
+        "{detail}. Not a great experience.",
+        "{detail}. Expected better.",
+        "{detail}. Needs improvement.",
+        "Disappointed, especially with {detail}.",
+        "{detail}. Would not rush back.",
+    ],
+}
+
+_SHORT_FALLBACKS = {
+    5: [
+        "Really smooth experience and the staff were genuinely helpful.",
+        "Loved how easy everything felt from start to finish.",
+        "Great quality, quick service, and a very comfortable visit.",
+        "Honestly better than expected. I would happily come back.",
+        "Simple, pleasant, and worth recommending.",
+    ],
+    4: [
+        "Good experience overall, with just a little room to improve.",
+        "Helpful staff and a smooth visit for the most part.",
+        "Pretty satisfied. A few small things could be better.",
+        "Worth visiting, especially for the service.",
+        "Nice overall experience and I would consider going again.",
+    ],
+    3: [
+        "Decent visit, but nothing really stood out.",
+        "Okay overall. Some parts worked better than others.",
+        "Not bad, just fairly average.",
+        "Fine experience, though it could feel more polished.",
+        "Mixed feelings. It was acceptable, not memorable.",
+    ],
+    2: [
+        "Expected better. A few things felt poorly handled.",
+        "Not very satisfied with the overall experience.",
+        "Service felt off and the visit could improve.",
+        "Below average experience, unfortunately.",
+        "Some basics need more attention here.",
+    ],
+    1: [
+        "Really disappointing experience overall.",
+        "Would not recommend based on this visit.",
+        "Too many things went wrong.",
+        "Very let down by the service.",
+        "Not a place I would return to.",
     ],
 }
 
@@ -124,6 +188,7 @@ def _build_prompt(
     customer_name: str,
     experience: str | None,
     variant_idx: int = 0,
+    short_review: bool = False,
 ) -> str:
     seo_keywords = ", ".join(business.seo_keyword) if business.seo_keyword else "none"
     profile_language = getattr(business, "language", None) or "English"
@@ -156,6 +221,12 @@ Don't list everything — one focused angle makes reviews sound more human."""
 STYLE REQUIREMENTS
 {extra_style}"""
 
+    length_rule = (
+        "- SHORT REVIEW: 1 natural sentence, or 2 very short sentences. Keep it under 18 words."
+        if short_review
+        else "- NORMAL REVIEW: 2 to 3 short sentences. Casual, phone-typed feel."
+    )
+
     return f"""You are {customer_name}, a real customer writing a {rating}-star Google review for a local business.
 
 BUSINESS
@@ -171,10 +242,12 @@ REVIEW BRIEF
 {context_block}
 
 RULES
-- 2 to 3 sentences. Casual, phone-typed feel.
+{length_rule}
 - Sound human. Avoid corporate words like "establishment", "patronize", "exemplary".
 - Do not mention exact numbers, days, dates, prices, or timelines unless the customer explicitly wrote them.
 - Do NOT start with the business name or "I" — vary the opening.
+- Vary the first words. Do not repeat common openings like "Great experience", "Really happy", "I had", or the business name.
+- Start from a detail, a feeling, an outcome, or a casual reaction so each review sounds written by a different person.
 - No quotes, no markdown, no bullets, no preamble like "Here's the review:".
 - Output ONLY the review text."""
 
@@ -194,18 +267,32 @@ def _clean_output(text: str) -> str:
     return cleaned
 
 
-def _fallback_review(business: UserBusiness, rating: int, experience: str | None, variant_idx: int = 0) -> str:
+def _fallback_review(
+    business: UserBusiness,
+    rating: int,
+    experience: str | None,
+    variant_idx: int = 0,
+    short_review: bool = False,
+) -> str:
     name = business.business_name
 
     if experience and experience.strip():
         exp     = experience.strip()
-        snippet = exp[:120].rstrip(",. ") + ("..." if len(exp) > 120 else "")
-
         bucket = "high" if rating >= 4 else ("mid" if rating == 3 else "low")
+
+        if short_review:
+            detail = exp[:55].rstrip(",. ")
+            templates = _SHORT_EXP_TEMPLATES[bucket]
+            return templates[variant_idx % len(templates)].format(detail=detail)
+
+        snippet = exp[:120].rstrip(",. ") + ("..." if len(exp) > 120 else "")
         templates = _EXP_TEMPLATES[bucket]
         opener, closer = templates[variant_idx % len(templates)]
         opener = opener.format(name=name)
         return f"{opener} {snippet}. {closer}"
+
+    if short_review:
+        return _SHORT_FALLBACKS[rating][variant_idx % len(_SHORT_FALLBACKS[rating])]
 
     pools = {
         5: [
@@ -264,6 +351,13 @@ def _sanitize_user_input(text: str | None) -> str | None:
     return text
 
 
+def _short_review_indexes(count: int) -> set[int]:
+    if count <= 0:
+        return set()
+    short_count = min(_SHORT_REVIEWS_PER_FIVE, count)
+    return set(random.sample(range(count), short_count))
+
+
 def _generate_one(
     business: UserBusiness,
     rating: int,
@@ -271,12 +365,20 @@ def _generate_one(
     experience: str | None,
     temperature: float,
     variant_idx: int,
+    short_review: bool,
 ) -> tuple[int, str | None]:
     """Returns (variant_idx, text | None)."""
-    prompt = _build_prompt(business, rating, customer_name, experience, variant_idx)
+    prompt = _build_prompt(
+        business,
+        rating,
+        customer_name,
+        experience,
+        variant_idx,
+        short_review=short_review,
+    )
     language = getattr(business, "language", None) or "English"
     tone = getattr(business, "tone", None) or "Professional"
-    max_tokens = 240 if (language != "English" or tone != "Professional") else 220
+    max_tokens = 90 if short_review else (240 if (language != "English" or tone != "Professional") else 220)
     try:
         # Small stagger so concurrent calls don't all hit the API at the same millisecond
         time.sleep(variant_idx * 0.15)
@@ -302,13 +404,23 @@ def generate_review_variants(
     experience    = _sanitize_user_input(experience)
 
     temperatures = [0.72, 0.78, 0.84, 0.88, 0.93][:count]
+    short_indexes = _short_review_indexes(count)
 
     # Map index → result so order is preserved
     results: dict[int, str | None] = {}
 
     with ThreadPoolExecutor(max_workers=count) as pool:
         futures = {
-            pool.submit(_generate_one, business, rating, customer_name, experience, t, i): i
+            pool.submit(
+                _generate_one,
+                business,
+                rating,
+                customer_name,
+                experience,
+                t,
+                i,
+                i in short_indexes,
+            ): i
             for i, t in enumerate(temperatures)
         }
         for future in as_completed(futures):
@@ -318,7 +430,17 @@ def generate_review_variants(
     reviews = []
     for i in range(count):
         text = results.get(i)
-        reviews.append(text if text else _fallback_review(business, rating, experience, variant_idx=i))
+        reviews.append(
+            text
+            if text
+            else _fallback_review(
+                business,
+                rating,
+                experience,
+                variant_idx=i,
+                short_review=i in short_indexes,
+            )
+        )
 
     return reviews
 
