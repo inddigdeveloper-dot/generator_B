@@ -21,6 +21,18 @@ _VARIANT_ANGLES = [
     "Start with the outcome — would you return or recommend? Then explain why.",
 ]
 
+# Each scan shuffles these so the five review options do not share the same opener.
+_OPENING_STYLES = [
+    "Start with a plain reaction, like something felt easy, helpful, disappointing, or worth it.",
+    "Start with a specific detail first, such as staff behavior, service speed, quality, ambience, or value.",
+    "Start with the outcome first, such as whether you would return, recommend it, or expected better.",
+    "Start like a casual note to a friend, using simple everyday wording and no polished intro.",
+    "Start with a balanced observation, then explain the main reason in the next sentence.",
+    "Start with what changed your mind during the visit, without using dramatic language.",
+    "Start with the strongest positive or negative point, not a generic review phrase.",
+    "Start with a small moment from the experience, then connect it to the overall feeling.",
+]
+
 # Varied openers/closers for fallback reviews that include experience text
 _EXP_TEMPLATES = {
     "high": [   # rating 4-5
@@ -189,6 +201,7 @@ def _build_prompt(
     experience: str | None,
     variant_idx: int = 0,
     short_review: bool = False,
+    opening_style: str | None = None,
 ) -> str:
     seo_keywords = ", ".join(business.seo_keyword) if business.seo_keyword else "none"
     profile_language = getattr(business, "language", None) or "English"
@@ -197,6 +210,7 @@ def _build_prompt(
     profile_tone = _profile_tone_instruction(profile_tone_name, rating)
     extra_style = _style_instruction(profile_language, profile_tone_name, rating)
     angle = _VARIANT_ANGLES[variant_idx % len(_VARIANT_ANGLES)]
+    opening_style = opening_style or _OPENING_STYLES[variant_idx % len(_OPENING_STYLES)]
 
     if experience and experience.strip():
         context_block = f"""The customer shared this about their visit:
@@ -238,6 +252,7 @@ REVIEW BRIEF
 - Rating: {rating}/5
 {brief_block}
 - Writing angle for THIS review: {angle}
+- Opening style for THIS review: {opening_style}
 
 {context_block}
 
@@ -248,6 +263,8 @@ RULES
 - Do NOT start with the business name or "I" — vary the opening.
 - Vary the first words. Do not repeat common openings like "Great experience", "Really happy", "I had", or the business name.
 - Start from a detail, a feeling, an outcome, or a casual reaction so each review sounds written by a different person.
+- Follow the opening style above exactly enough that this review begins differently from the other four options.
+- Avoid using the same first 4 words as any other review option in this batch.
 - No quotes, no markdown, no bullets, no preamble like "Here's the review:".
 - Output ONLY the review text."""
 
@@ -358,6 +375,12 @@ def _short_review_indexes(count: int) -> set[int]:
     return set(random.sample(range(count), short_count))
 
 
+def _opening_styles_for_count(count: int) -> list[str]:
+    styles = _OPENING_STYLES[:]
+    random.shuffle(styles)
+    return [styles[i % len(styles)] for i in range(count)]
+
+
 def _generate_one(
     business: UserBusiness,
     rating: int,
@@ -366,6 +389,7 @@ def _generate_one(
     temperature: float,
     variant_idx: int,
     short_review: bool,
+    opening_style: str,
 ) -> tuple[int, str | None]:
     """Returns (variant_idx, text | None)."""
     prompt = _build_prompt(
@@ -375,6 +399,7 @@ def _generate_one(
         experience,
         variant_idx,
         short_review=short_review,
+        opening_style=opening_style,
     )
     language = getattr(business, "language", None) or "English"
     tone = getattr(business, "tone", None) or "Professional"
@@ -405,6 +430,7 @@ def generate_review_variants(
 
     temperatures = [0.72, 0.78, 0.84, 0.88, 0.93][:count]
     short_indexes = _short_review_indexes(count)
+    opening_styles = _opening_styles_for_count(count)
 
     # Map index → result so order is preserved
     results: dict[int, str | None] = {}
@@ -420,6 +446,7 @@ def generate_review_variants(
                 t,
                 i,
                 i in short_indexes,
+                opening_styles[i],
             ): i
             for i, t in enumerate(temperatures)
         }
