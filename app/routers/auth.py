@@ -19,7 +19,7 @@ from app.schemas.user import (
     UserProfile,
 ) 
 from app.services import auth as auth_services
-from app.services.keywords import clean_keywords
+from app.services.keywords import clean_keywords, normalize_business_keywords
 
 router = APIRouter()
 
@@ -154,7 +154,11 @@ def refresh_tokens(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserProfile)
-def get_me(current_user: UserBusiness = Depends(auth_services.get_current_user)):
+def get_me(
+    db: Session = Depends(get_db),
+    current_user: UserBusiness = Depends(auth_services.get_current_user),
+):
+    normalize_business_keywords(current_user, db)
     return current_user
 
 

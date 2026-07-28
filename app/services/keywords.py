@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 
 _LOCATION_WORDS = (
@@ -64,3 +65,14 @@ def clean_keywords(keywords: list[str] | None) -> list[str]:
             cleaned_keywords.append(cleaned)
             seen.add(key)
     return cleaned_keywords
+
+
+def normalize_business_keywords(business: Any, db: Any) -> bool:
+    cleaned = clean_keywords(getattr(business, "seo_keyword", None))
+    if cleaned == (getattr(business, "seo_keyword", None) or []):
+        return False
+
+    business.seo_keyword = cleaned
+    db.commit()
+    db.refresh(business)
+    return True

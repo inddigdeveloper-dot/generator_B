@@ -9,7 +9,7 @@ from app.schemas.public_review import (
     PublicGenerateRequest,
     PublicGenerateResponse,
 )
-from app.services.keywords import clean_keywords
+from app.services.keywords import clean_keywords, normalize_business_keywords
 from app.services import review as review_service
 
 router = APIRouter()
@@ -59,6 +59,7 @@ def generate_public_review(
     biz = db.query(UserBusiness).filter(UserBusiness.user_name == username).first()
     if not biz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business not found")
+    normalize_business_keywords(biz, db)
 
     google_url = _google_review_url(biz)
     if not google_url:
