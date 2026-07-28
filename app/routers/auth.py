@@ -19,6 +19,7 @@ from app.schemas.user import (
     UserProfile,
 ) 
 from app.services import auth as auth_services
+from app.services.keywords import clean_keywords
 
 router = APIRouter()
 
@@ -36,7 +37,7 @@ def register(request: Request, payload: BusinessRegister, db: Session = Depends(
         user_name=payload.user_name,
         business_name=payload.business_name,
         email=payload.email,
-        seo_keyword=payload.seo_keyword,
+        seo_keyword=clean_keywords(payload.seo_keyword),
         mobile_no=payload.mobile_no,
         hashed_password=auth_services.get_password_hash(payload.password),
         review_link=payload.review_link,
@@ -164,6 +165,8 @@ def update_me(
     current_user: UserBusiness = Depends(auth_services.get_current_user),
 ):
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if field == "seo_keyword":
+            value = clean_keywords(value)
         setattr(current_user, field, value)
     db.commit()
     db.refresh(current_user)

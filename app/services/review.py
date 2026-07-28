@@ -4,6 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.db.models import UserBusiness
+from app.services.keywords import clean_keywords
 from app.services.llm_provider import QuotaExceededError, get_provider
 
 logger = logging.getLogger(__name__)
@@ -195,13 +196,13 @@ def _style_instruction(language: str | None, tone: str | None, rating: int) -> s
 
 
 def _seo_keywords(business: UserBusiness) -> list[str]:
-    return [str(keyword).strip() for keyword in (business.seo_keyword or []) if str(keyword).strip()]
+    return clean_keywords(business.seo_keyword)
 
 
-def _keyword_rule(business: UserBusiness, variant_idx: int) -> tuple[str, str]:
+def _keyword_rule(business: UserBusiness, variant_idx: int, require_keyword: bool) -> tuple[str, str]:
     keywords = _seo_keywords(business)
-    if not keywords:
-        return "none", "No SEO keyword is saved, so do not invent one."
+    if not keywords or not require_keyword:
+        return "none", "Do not force an SEO keyword in this review option."
 
     selected_keyword = keywords[variant_idx % len(keywords)]
     return (
@@ -218,8 +219,9 @@ def _build_prompt(
     variant_idx: int = 0,
     short_review: bool = False,
     opening_style: str | None = None,
+    require_keyword: bool = True,
 ) -> str:
-    seo_keywords, keyword_rule = _keyword_rule(business, variant_idx)
+    seo_keywords, keyword_rule = _keyword_rule(business, variant_idx, require_keyword)
     profile_language = getattr(business, "language", None) or "English"
     profile_tone_name = getattr(business, "tone", None) or "Professional"
     rating_tone = _tone_for_rating(rating)
@@ -392,6 +394,13 @@ def _short_review_indexes(count: int) -> set[int]:
     return set(random.sample(range(count), short_count))
 
 
+def _keyword_review_indexes(count: int, has_keywords: bool) -> set[int]:
+    if count <= 0 or not has_keywords:
+        return set()
+    keyword_count = min(count, max(1, round(count * 0.6)))
+    return set(random.sample(range(count), keyword_count))
+
+
 def _opening_styles_for_count(count: int) -> list[str]:
     styles = _OPENING_STYLES[:]
     random.shuffle(styles)
@@ -407,6 +416,7 @@ def _generate_one(
     variant_idx: int,
     short_review: bool,
     opening_style: str,
+    require_keyword: bool,
 ) -> tuple[int, str | None]:
     """Returns (variant_idx, text | None)."""
     prompt = _build_prompt(
@@ -417,6 +427,7 @@ def _generate_one(
         variant_idx,
         short_review=short_review,
         opening_style=opening_style,
+        require_keyword=require_keyword,
     )
     language = getattr(business, "language", None) or "English"
     tone = getattr(business, "tone", None) or "Professional"
@@ -447,6 +458,7 @@ def generate_review_variants(
 
     temperatures = [0.72, 0.78, 0.84, 0.88, 0.93][:count]
     short_indexes = _short_review_indexes(count)
+    keyword_indexes = _keyword_review_indexes(count, bool(_seo_keywords(business)))
     opening_styles = _opening_styles_for_count(count)
 
     # Map index → result so order is preserved
@@ -464,6 +476,7 @@ def generate_review_variants(
                 i,
                 i in short_indexes,
                 opening_styles[i],
+                i in keyword_indexes,
             ): i
             for i, t in enumerate(temperatures)
         }

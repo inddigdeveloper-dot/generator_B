@@ -9,6 +9,7 @@ from app.schemas.public_review import (
     PublicGenerateRequest,
     PublicGenerateResponse,
 )
+from app.services.keywords import clean_keywords
 from app.services import review as review_service
 
 router = APIRouter()
@@ -26,7 +27,8 @@ def _client_ip(request: Request) -> str:
 
 
 def _cache_context(biz: UserBusiness) -> str:
-    return f"language={biz.language or 'English'}|tone={biz.tone or 'Professional'}"
+    keywords = ",".join(clean_keywords(biz.seo_keyword))
+    return f"language={biz.language or 'English'}|tone={biz.tone or 'Professional'}|keywords={keywords}"
 
 
 @router.get("/{username}", response_model=PublicBusinessInfo)
