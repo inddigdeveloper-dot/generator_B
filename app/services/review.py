@@ -194,6 +194,22 @@ def _style_instruction(language: str | None, tone: str | None, rating: int) -> s
     return "\n".join(line for line in lines if line)
 
 
+def _seo_keywords(business: UserBusiness) -> list[str]:
+    return [str(keyword).strip() for keyword in (business.seo_keyword or []) if str(keyword).strip()]
+
+
+def _keyword_rule(business: UserBusiness, variant_idx: int) -> tuple[str, str]:
+    keywords = _seo_keywords(business)
+    if not keywords:
+        return "none", "No SEO keyword is saved, so do not invent one."
+
+    selected_keyword = keywords[variant_idx % len(keywords)]
+    return (
+        ", ".join(keywords),
+        f'Include this exact SEO keyword naturally once: "{selected_keyword}". Do not stuff extra keywords.',
+    )
+
+
 def _build_prompt(
     business: UserBusiness,
     rating: int,
@@ -203,7 +219,7 @@ def _build_prompt(
     short_review: bool = False,
     opening_style: str | None = None,
 ) -> str:
-    seo_keywords = ", ".join(business.seo_keyword) if business.seo_keyword else "none"
+    seo_keywords, keyword_rule = _keyword_rule(business, variant_idx)
     profile_language = getattr(business, "language", None) or "English"
     profile_tone_name = getattr(business, "tone", None) or "Professional"
     rating_tone = _tone_for_rating(rating)
@@ -246,11 +262,12 @@ STYLE REQUIREMENTS
 BUSINESS
 - Name: {business.business_name}
 - About: {business.business_desc or "(no description provided)"}
-- SEO keywords (weave in ONLY if natural, never force): {seo_keywords}
+- SEO keywords available: {seo_keywords}
 
 REVIEW BRIEF
 - Rating: {rating}/5
 {brief_block}
+- SEO keyword rule: {keyword_rule}
 - Writing angle for THIS review: {angle}
 - Opening style for THIS review: {opening_style}
 
