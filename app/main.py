@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -18,6 +19,7 @@ from app.routers.public_review import router as public_review_router
 from app.routers.reminders import router as reminders_router
 from app.routers.reviews import router as reviews_router
 from app.routers.smart_reply import router as smart_reply_router
+from app.services.scheduler import qr_inactive_reminder_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,8 +35,19 @@ async def lifespan(_app: FastAPI):
         # Dev-only shortcut — run `alembic upgrade head` in production
         Base.metadata.create_all(bind=engine)
         logger.warning("dev mode: created tables via create_all — use Alembic in production")
+    scheduler_task = None
+    if settings.qr_reminder_scheduler_enabled:
+        scheduler_task = asyncio.create_task(qr_inactive_reminder_scheduler())
     logger.info("Application started (debug=%s)", settings.debug)
-    yield
+    try:
+        yield
+    finally:
+        if scheduler_task:
+            scheduler_task.cancel()
+            try:
+                await scheduler_task
+            except asyncio.CancelledError:
+                pass
     logger.info("Application shutting down")
 
 

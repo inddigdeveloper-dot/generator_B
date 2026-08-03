@@ -78,3 +78,11 @@ class GeneratedReview(Base):
     updated_at    = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     user = relationship("UserBusiness", back_populates="reviews")
+
+
+class JobLock(Base):
+    __tablename__ = "job_locks"
+
+    job_name = Column(String, primary_key=True, nullable=False)
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)

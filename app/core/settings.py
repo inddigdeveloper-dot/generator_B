@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     aisensy_campaign_name: Optional[str] = None
     aisensy_source: str = "qr_inactive_reminder"
     reminder_job_token: Optional[str] = None
+    qr_reminder_scheduler_enabled: bool = True
+    qr_reminder_run_hour_ist: int = 10
+    qr_reminder_run_minute_ist: int = 0
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILES,

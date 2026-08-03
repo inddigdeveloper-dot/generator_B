@@ -1,12 +1,16 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import UserBusiness
+from app.db.models import JobLock, UserBusiness
 from app.services.aisensy import send_qr_inactive_reminder
 
 REMINDER_INTERVAL = timedelta(days=7)
+REMINDER_JOB_NAME = "qr_inactive_reminder"
+RUN_TIMEZONE = ZoneInfo("Asia/Kolkata")
 
 
 @dataclass
@@ -99,3 +103,45 @@ def send_inactive_qr_reminders(
 
     db.commit()
     return result
+
+
+def _local_run_date(value: datetime) -> object:
+    return ensure_aware(value).astimezone(RUN_TIMEZONE).date()
+
+
+def claim_daily_reminder_run(db: Session, now: datetime | None = None) -> bool:
+    now = now or utc_now()
+
+    try:
+        if db.get(JobLock, REMINDER_JOB_NAME) is None:
+            db.add(JobLock(job_name=REMINDER_JOB_NAME))
+            db.commit()
+    except IntegrityError:
+        db.rollback()
+
+    lock = (
+        db.query(JobLock)
+        .filter(JobLock.job_name == REMINDER_JOB_NAME)
+        .with_for_update()
+        .one()
+    )
+    last_run_at = ensure_aware(lock.last_run_at)
+    if last_run_at and _local_run_date(last_run_at) == _local_run_date(now):
+        db.rollback()
+        return False
+
+    lock.last_run_at = now
+    db.commit()
+    return True
+
+
+def run_scheduled_qr_inactive_reminders(limit: int = 500) -> ReminderRunResult | None:
+    from app.db.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        if not claim_daily_reminder_run(db):
+            return None
+        return send_inactive_qr_reminders(db, dry_run=False, limit=limit)
+    finally:
+        db.close()
