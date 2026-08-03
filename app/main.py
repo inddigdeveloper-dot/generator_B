@@ -15,6 +15,7 @@ from app.core.settings import settings
 from app.db.database import Base, SessionLocal, engine
 from app.routers.auth import router as auth_router
 from app.routers.public_review import router as public_review_router
+from app.routers.reminders import router as reminders_router
 from app.routers.reviews import router as reviews_router
 from app.routers.smart_reply import router as smart_reply_router
 
@@ -67,6 +68,7 @@ app.include_router(auth_router,         prefix="/auth",        tags=["Auth"])
 app.include_router(reviews_router,      prefix="/reviews",     tags=["Reviews"])
 app.include_router(smart_reply_router,  prefix="/smart-reply", tags=["Smart Reply"])
 app.include_router(public_review_router, prefix="/r",          tags=["Public Review"])
+app.include_router(reminders_router,    prefix="/reminders",   tags=["Reminders"])
 
 
 @app.get("/", tags=["Health"])

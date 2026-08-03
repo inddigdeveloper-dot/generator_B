@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     # Redis — optional, enables shared rate limiting + cache across workers
     redis_url: Optional[str] = None
 
+    # WhatsApp QR inactivity reminders
+    aisensy_api_key: Optional[str] = None
+    aisensy_campaign_name: Optional[str] = None
+    aisensy_source: str = "qr_inactive_reminder"
+    reminder_job_token: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=_ENV_FILES,
         env_file_encoding="utf-8",

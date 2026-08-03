@@ -10,6 +10,7 @@ from app.schemas.public_review import (
     PublicGenerateResponse,
 )
 from app.services.keywords import clean_keywords, normalize_business_keywords
+from app.services.qr_reminder import record_qr_scan
 from app.services import review as review_service
 
 router = APIRouter()
@@ -36,6 +37,7 @@ def get_business_info(username: str, db: Session = Depends(get_db)):
     biz = db.query(UserBusiness).filter(UserBusiness.user_name == username).first()
     if not biz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business not found")
+    record_qr_scan(biz, db)
     return PublicBusinessInfo(business_name=biz.business_name, business_desc=biz.business_desc)
 
 

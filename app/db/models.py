@@ -54,6 +54,9 @@ class UserBusiness(Base):
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    qr_tracking_started_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=True)
+    last_qr_scan_at = Column(DateTime(timezone=True), nullable=True)
+    last_qr_reminder_sent_at = Column(DateTime(timezone=True), nullable=True)
 
     reviews = relationship(
         "GeneratedReview", back_populates="user", cascade="all, delete-orphan"
