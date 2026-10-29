@@ -47,12 +47,28 @@ def generate(
             detail="Ollama provider selected but OLLAMA_BASE_URL is not set in .env.",
         )
 
-    text = review_service.generate_review_text(
-        business=current_user,
-        rating=payload.rating,
-        customer_name=payload.customer_name,
-        experience=payload.experience,
-    )
+    previous_reviews = [
+        row[0]
+        for row in (
+            db.query(GeneratedReview.review_text)
+            .filter(GeneratedReview.user_id == current_user.id)
+            .order_by(GeneratedReview.created_at.desc())
+            .all()
+        )
+    ]
+    try:
+        text = review_service.generate_review_text(
+            business=current_user,
+            rating=payload.rating,
+            customer_name=payload.customer_name,
+            experience=payload.experience,
+            excluded_reviews=previous_reviews,
+        )
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="A fresh review could not be generated. Please try again.",
+        )
 
     review = GeneratedReview(
         user_id=current_user.id,

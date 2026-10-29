@@ -1,7 +1,9 @@
 import logging
 import random
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from difflib import SequenceMatcher
 
 from app.db.models import UserBusiness
 from app.services.keywords import clean_keywords
@@ -220,6 +222,7 @@ def _build_prompt(
     short_review: bool = False,
     opening_style: str | None = None,
     require_keyword: bool = True,
+    avoided_reviews: list[str] | None = None,
 ) -> str:
     seo_keywords, keyword_rule = _keyword_rule(business, variant_idx, require_keyword)
     profile_language = getattr(business, "language", None) or "English"
@@ -229,6 +232,18 @@ def _build_prompt(
     extra_style = _style_instruction(profile_language, profile_tone_name, rating)
     angle = _VARIANT_ANGLES[variant_idx % len(_VARIANT_ANGLES)]
     opening_style = opening_style or _OPENING_STYLES[variant_idx % len(_OPENING_STYLES)]
+    avoided_reviews = avoided_reviews or []
+    avoid_block = ""
+    if avoided_reviews:
+        examples = "\n".join(
+            f'- "{review[:220]}"'
+            for review in avoided_reviews[-12:]
+        )
+        avoid_block = f"""
+
+REVIEWS ALREADY USED FOR THIS BUSINESS
+{examples}
+Write a genuinely new review. Do not copy, paraphrase, or reuse the sentence structure or opening of these reviews."""
 
     if experience and experience.strip():
         context_block = f"""The customer shared this about their visit:
@@ -274,6 +289,7 @@ REVIEW BRIEF
 - Opening style for THIS review: {opening_style}
 
 {context_block}
+{avoid_block}
 
 RULES
 {length_rule}
@@ -417,6 +433,7 @@ def _generate_one(
     short_review: bool,
     opening_style: str,
     require_keyword: bool,
+    avoided_reviews: list[str] | None = None,
 ) -> tuple[int, str | None]:
     """Returns (variant_idx, text | None)."""
     prompt = _build_prompt(
@@ -428,6 +445,7 @@ def _generate_one(
         short_review=short_review,
         opening_style=opening_style,
         require_keyword=require_keyword,
+        avoided_reviews=avoided_reviews,
     )
     language = getattr(business, "language", None) or "English"
     tone = getattr(business, "tone", None) or "Professional"
@@ -443,18 +461,43 @@ def _generate_one(
         return variant_idx, None
 
 
+def _review_fingerprint(text: str) -> str:
+    return " ".join(re.findall(r"\w+", (text or "").casefold(), flags=re.UNICODE))
+
+
+def _is_too_similar(candidate: str, existing_reviews: list[str]) -> bool:
+    candidate_key = _review_fingerprint(candidate)
+    if not candidate_key:
+        return True
+
+    for existing in existing_reviews:
+        existing_key = _review_fingerprint(existing)
+        if not existing_key:
+            continue
+        if candidate_key == existing_key:
+            return True
+
+        ratio = SequenceMatcher(None, candidate_key, existing_key).ratio()
+        threshold = 0.92 if min(len(candidate_key), len(existing_key)) < 60 else 0.86
+        if ratio >= threshold:
+            return True
+    return False
+
+
 def generate_review_variants(
     business: UserBusiness,
     rating: int,
     customer_name: str = "a customer",
     experience: str | None = None,
     count: int = 5,
+    excluded_reviews: list[str] | None = None,
 ) -> list[str]:
     if rating not in (1, 2, 3, 4, 5):
         raise ValueError(f"rating must be 1-5, got {rating}")
 
     customer_name = (customer_name or "a customer").strip()
     experience    = _sanitize_user_input(experience)
+    excluded_reviews = [text for text in (excluded_reviews or []) if text]
 
     temperatures = [0.72, 0.78, 0.84, 0.88, 0.93][:count]
     short_indexes = _short_review_indexes(count)
@@ -477,6 +520,7 @@ def generate_review_variants(
                 i in short_indexes,
                 opening_styles[i],
                 i in keyword_indexes,
+                excluded_reviews,
             ): i
             for i, t in enumerate(temperatures)
         }
@@ -484,20 +528,39 @@ def generate_review_variants(
             idx, text = future.result()
             results[idx] = text
 
-    reviews = []
+    reviews: list[str] = []
     for i in range(count):
         text = results.get(i)
-        reviews.append(
-            text
-            if text
-            else _fallback_review(
+        if not text:
+            text = _fallback_review(
                 business,
                 rating,
                 experience,
                 variant_idx=i,
                 short_review=i in short_indexes,
             )
-        )
+
+        comparisons = excluded_reviews + reviews
+        for retry in range(3):
+            if not _is_too_similar(text, comparisons):
+                break
+            _, retry_text = _generate_one(
+                business,
+                rating,
+                customer_name,
+                experience,
+                min(0.98, 0.88 + retry * 0.05),
+                i,
+                i in short_indexes,
+                random.choice(_OPENING_STYLES),
+                i in keyword_indexes,
+                comparisons[-20:],
+            )
+            text = retry_text or ""
+
+        if not text or _is_too_similar(text, comparisons):
+            raise RuntimeError("Could not generate a unique review after multiple attempts")
+        reviews.append(text)
 
     return reviews
 
@@ -507,13 +570,22 @@ def generate_review_text(
     rating: int,
     customer_name: str = "a customer",
     experience: str | None = None,
+    excluded_reviews: list[str] | None = None,
 ) -> str:
     if rating not in (1, 2, 3, 4, 5):
         raise ValueError(f"rating must be 1-5, got {rating}")
 
     customer_name = (customer_name or "a customer").strip()
     experience    = _sanitize_user_input(experience)
-    prompt        = _build_prompt(business, rating, customer_name, experience, variant_idx=0)
+    excluded_reviews = [text for text in (excluded_reviews or []) if text]
+    prompt        = _build_prompt(
+        business,
+        rating,
+        customer_name,
+        experience,
+        variant_idx=0,
+        avoided_reviews=excluded_reviews,
+    )
     language      = getattr(business, "language", None) or "English"
     tone          = getattr(business, "tone", None) or "Professional"
     max_tokens    = 240 if (language != "English" or tone != "Professional") else 200
@@ -522,10 +594,30 @@ def generate_review_text(
         raw = _provider.generate(prompt, max_tokens=max_tokens, temperature=0.8)
     except QuotaExceededError:
         logger.warning("LLM quota exhausted for business_id=%s — using fallback", business.id)
-        return _fallback_review(business, rating, experience, variant_idx=0)
+        raw = ""
     except RuntimeError as e:
         logger.exception("LLM provider error for business_id=%s: %s", business.id, e)
         raise
 
     cleaned = _clean_output(raw)
-    return cleaned if cleaned else _fallback_review(business, rating, experience, variant_idx=0)
+    text = cleaned if cleaned else _fallback_review(business, rating, experience, variant_idx=0)
+    for retry in range(3):
+        if not _is_too_similar(text, excluded_reviews):
+            return text
+        _, retry_text = _generate_one(
+            business,
+            rating,
+            customer_name,
+            experience,
+            min(0.98, 0.88 + retry * 0.05),
+            retry + 1,
+            False,
+            random.choice(_OPENING_STYLES),
+            True,
+            excluded_reviews[-20:],
+        )
+        text = retry_text or ""
+
+    if not text or _is_too_similar(text, excluded_reviews):
+        raise RuntimeError("Could not generate a unique review after multiple attempts")
+    return text

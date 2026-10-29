@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core import rate_limit, review_cache
+from app.core import rate_limit
 from app.db.database import get_db
 from app.db.models import GeneratedReview, UserBusiness
 from app.schemas.public_review import (
@@ -9,7 +9,7 @@ from app.schemas.public_review import (
     PublicGenerateRequest,
     PublicGenerateResponse,
 )
-from app.services.keywords import clean_keywords, normalize_business_keywords
+from app.services.keywords import normalize_business_keywords
 from app.services.qr_reminder import record_qr_scan
 from app.services import review as review_service
 
@@ -25,11 +25,6 @@ def _google_review_url(biz: UserBusiness) -> str:
 def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("X-Real-IP")
     return forwarded if forwarded else (request.client.host if request.client else "unknown")
-
-
-def _cache_context(biz: UserBusiness) -> str:
-    keywords = ",".join(clean_keywords(biz.seo_keyword))
-    return f"language={biz.language or 'English'}|tone={biz.tone or 'Professional'}|keywords={keywords}"
 
 
 @router.get("/{username}", response_model=PublicBusinessInfo)
@@ -70,11 +65,15 @@ def generate_public_review(
             detail="This business hasn't configured a Google review link yet.",
         )
 
-    # ── Cache check (pure Python, 20-minute TTL) ───────────────────────────────
-    cache_context = _cache_context(biz)
-    cached = review_cache.get(username, payload.rating, payload.experience, context=cache_context)
-    if cached:
-        return PublicGenerateResponse(reviews=cached, google_review_url=google_url)
+    previous_reviews = [
+        row[0]
+        for row in (
+            db.query(GeneratedReview.review_text)
+            .filter(GeneratedReview.user_id == biz.id)
+            .order_by(GeneratedReview.created_at.desc())
+            .all()
+        )
+    ]
 
     # ── Generate 5 variants in parallel ───────────────────────────────────────
     try:
@@ -84,15 +83,13 @@ def generate_public_review(
             customer_name="A customer",
             experience=payload.experience,
             count=5,
+            excluded_reviews=previous_reviews,
         )
     except RuntimeError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Review generation is temporarily unavailable. Please try again shortly.",
         )
-
-    # ── Cache results ──────────────────────────────────────────────────────────
-    review_cache.put(username, payload.rating, payload.experience, reviews, context=cache_context)
 
     # ── Persist all variants ───────────────────────────────────────────────────
     for text in reviews:
