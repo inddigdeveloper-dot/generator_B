@@ -76,20 +76,14 @@ def generate_public_review(
     ]
 
     # ── Generate 5 variants in parallel ───────────────────────────────────────
-    try:
-        reviews = review_service.generate_review_variants(
-            business=biz,
-            rating=payload.rating,
-            customer_name="A customer",
-            experience=payload.experience,
-            count=5,
-            excluded_reviews=previous_reviews,
-        )
-    except RuntimeError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Review generation is temporarily unavailable. Please try again shortly.",
-        )
+    reviews = review_service.generate_review_variants(
+        business=biz,
+        rating=payload.rating,
+        customer_name="A customer",
+        experience=payload.experience,
+        count=5,
+        excluded_reviews=previous_reviews,
+    )
 
     # ── Persist all variants ───────────────────────────────────────────────────
     for text in reviews:

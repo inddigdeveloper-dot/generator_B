@@ -436,27 +436,30 @@ def _generate_one(
     avoided_reviews: list[str] | None = None,
 ) -> tuple[int, str | None]:
     """Returns (variant_idx, text | None)."""
-    prompt = _build_prompt(
-        business,
-        rating,
-        customer_name,
-        experience,
-        variant_idx,
-        short_review=short_review,
-        opening_style=opening_style,
-        require_keyword=require_keyword,
-        avoided_reviews=avoided_reviews,
-    )
-    language = getattr(business, "language", None) or "English"
-    tone = getattr(business, "tone", None) or "Professional"
-    max_tokens = 90 if short_review else (240 if (language != "English" or tone != "Professional") else 220)
     try:
+        prompt = _build_prompt(
+            business,
+            rating,
+            customer_name,
+            experience,
+            variant_idx,
+            short_review=short_review,
+            opening_style=opening_style,
+            require_keyword=require_keyword,
+            avoided_reviews=avoided_reviews,
+        )
+        language = getattr(business, "language", None) or "English"
+        tone = getattr(business, "tone", None) or "Professional"
+        max_tokens = 90 if short_review else (240 if (language != "English" or tone != "Professional") else 220)
         # Small stagger so concurrent calls don't all hit the API at the same millisecond
         time.sleep(variant_idx * 0.15)
         raw     = _provider.generate(prompt, max_tokens=max_tokens, temperature=temperature)
         cleaned = _clean_output(raw)
         return variant_idx, (cleaned if cleaned else None)
-    except (QuotaExceededError, RuntimeError) as e:
+    except Exception as e:
+        # Public review generation must remain available when an upstream model,
+        # SDK response, or worker fails. The caller fills this slot with a safe
+        # deterministic fallback review.
         logger.warning("Variant %d generation failed (temp=%.2f): %s", variant_idx, temperature, e)
         return variant_idx, None
 
@@ -507,26 +510,31 @@ def generate_review_variants(
     # Map index → result so order is preserved
     results: dict[int, str | None] = {}
 
-    with ThreadPoolExecutor(max_workers=count) as pool:
-        futures = {
-            pool.submit(
-                _generate_one,
-                business,
-                rating,
-                customer_name,
-                experience,
-                t,
-                i,
-                i in short_indexes,
-                opening_styles[i],
-                i in keyword_indexes,
-                excluded_reviews,
-            ): i
-            for i, t in enumerate(temperatures)
-        }
-        for future in as_completed(futures):
-            idx, text = future.result()
-            results[idx] = text
+    try:
+        # Keep concurrency modest on small Railway containers. If the runtime
+        # cannot start workers, all missing slots are filled below.
+        with ThreadPoolExecutor(max_workers=min(count, 3)) as pool:
+            futures = {
+                pool.submit(
+                    _generate_one,
+                    business,
+                    rating,
+                    customer_name,
+                    experience,
+                    t,
+                    i,
+                    i in short_indexes,
+                    opening_styles[i],
+                    i in keyword_indexes,
+                    excluded_reviews,
+                ): i
+                for i, t in enumerate(temperatures)
+            }
+            for future in as_completed(futures):
+                idx, text = future.result()
+                results[idx] = text
+    except Exception as e:
+        logger.exception("Parallel review generation failed; using fallback variants: %s", e)
 
     reviews: list[str] = []
     for i in range(count):
