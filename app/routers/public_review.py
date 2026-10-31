@@ -22,9 +22,16 @@ def _google_review_url(biz: UserBusiness) -> str:
     return biz.review_link or ""
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Real-IP")
-    return forwarded if forwarded else (request.client.host if request.client else "unknown")
+def _client_identity(request: Request, username: str) -> str:
+    visitor_id = request.headers.get("X-Review-Visitor", "").strip()
+    if visitor_id and 8 <= len(visitor_id) <= 100:
+        return f"{username}|visitor:{visitor_id}"
+
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    forwarded_ip = forwarded_for.split(",", 1)[0].strip() if forwarded_for else ""
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    client_ip = request.client.host if request.client else "unknown"
+    return f"{username}|ip:{forwarded_ip or real_ip or client_ip}"
 
 
 @router.get("/{username}", response_model=PublicBusinessInfo)
@@ -43,9 +50,10 @@ def generate_public_review(
     payload: PublicGenerateRequest,
     db: Session = Depends(get_db),
 ):
-    # ── Rate limiting (pure Python, 3 requests per 7 minutes per IP) ──────────
-    ip = _client_ip(request)
-    allowed, retry_after = rate_limit.check(ip)
+    # Three generation actions per visitor/profile; network retries count once.
+    identity = _client_identity(request, username)
+    request_id = request.headers.get("X-Review-Request-ID", "").strip() or None
+    allowed, retry_after = rate_limit.check(identity, request_id)
     if not allowed:
         mins = (retry_after + 59) // 60
         raise HTTPException(

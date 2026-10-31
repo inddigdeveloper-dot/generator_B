@@ -1,5 +1,5 @@
 """
-Public review rate limiter — 3 requests per 7 minutes per IP.
+Public review rate limiter — 3 generation actions per 7 minutes per visitor and profile.
 
 Uses Redis when REDIS_URL is set (shared across workers, survives restarts).
 Falls back to an in-process store when Redis is unavailable.
@@ -48,10 +48,18 @@ def _redis_client():
     return _redis
 
 
-def _redis_check(ip: str) -> tuple[bool, int]:
+def _redis_check(identity: str, request_id: str | None = None) -> tuple[bool, int]:
     r   = _redis_client()
-    key = f"rl:pub:{hashlib.sha1(ip.encode()).hexdigest()}"
+    identity_hash = hashlib.sha1(identity.encode()).hexdigest()
+    key = f"rl:pub:{identity_hash}"
     now = time.time()
+
+    request_key = None
+    if request_id:
+        request_hash = hashlib.sha1(request_id.encode()).hexdigest()
+        request_key = f"rl:pub:req:{identity_hash}:{request_hash}"
+        if r.exists(request_key):
+            return True, 0
 
     pipe = r.pipeline()
     pipe.lrange(key, 0, -1)
@@ -70,6 +78,8 @@ def _redis_check(ip: str) -> tuple[bool, int]:
         pipe.rpush(key, h)
     pipe.rpush(key, now)
     pipe.expire(key, WINDOW_SECONDS + 10)
+    if request_key:
+        pipe.set(request_key, "1", ex=WINDOW_SECONDS + 10)
     pipe.execute()
     return True, 0
 
@@ -77,29 +87,46 @@ def _redis_check(ip: str) -> tuple[bool, int]:
 # ── In-process fallback ────────────────────────────────────────────────────────
 
 _store: dict[str, list[float]] = defaultdict(list)
+_seen_requests: dict[str, float] = {}
 _lock  = Lock()
 
 
-def _memory_check(ip: str) -> tuple[bool, int]:
+def _memory_check(identity: str, request_id: str | None = None) -> tuple[bool, int]:
     now = time.time()
     with _lock:
-        hits = [t for t in _store[ip] if now - t < WINDOW_SECONDS]
-        _store[ip] = hits
+        expired_ids = [key for key, expires_at in _seen_requests.items() if expires_at <= now]
+        for key in expired_ids:
+            _seen_requests.pop(key, None)
+
+        request_key = f"{identity}|{request_id}" if request_id else None
+        if request_key and request_key in _seen_requests:
+            return True, 0
+
+        hits = [t for t in _store[identity] if now - t < WINDOW_SECONDS]
+        _store[identity] = hits
         if len(hits) >= MAX_REQUESTS:
             retry_after = int(WINDOW_SECONDS - (now - hits[0]))
             return False, max(retry_after, 1)
-        _store[ip].append(now)
+        _store[identity].append(now)
+        if request_key:
+            _seen_requests[request_key] = now + WINDOW_SECONDS + 10
         return True, 0
 
 
 # ── Public interface ──────────────────────────────────────────────────────────
 
-def check(ip: str) -> tuple[bool, int]:
-    """Returns (allowed, retry_after_seconds). Records the hit when allowed."""
+def check(identity: str, request_id: str | None = None) -> tuple[bool, int]:
+    """Return allowance and retry delay; retries with one request ID count once."""
     r = _redis_client()
     if r:
         try:
-            return _redis_check(ip)
+            return _redis_check(identity, request_id)
         except Exception as e:
             logger.warning("Redis rate-limit error: %s — falling back to in-process", e)
-    return _memory_check(ip)
+    return _memory_check(identity, request_id)
+
+
+def reset_for_tests() -> None:
+    with _lock:
+        _store.clear()
+        _seen_requests.clear()
